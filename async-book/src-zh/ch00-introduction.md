@@ -8,7 +8,7 @@
 
 ---
 
-Rust 中异步编程的深入指南。与大多数从 `tokio::main` 开始并手动解释内部结构的异步教程不同，本指南从第一原理（`Future` trait、轮询、状态机）构建理解，然后深入到现实世界的模式、Runtime 选择和生产环境陷阱。
+Rust 中异步编程的深入指南。与大多数从 `tokio::main` 开始并手动解释内部结构的异步教程不同，本指南从第一性原理（`Future` trait、轮询、状态机）构建理解，然后深入到现实世界的模式、Runtime 选择和生产环境陷阱。
 
 ## 这是给谁的
 - Rust 可以编写同步 Rust 但发现异步令人困惑的开发人员
@@ -19,7 +19,7 @@ Rust 中异步编程的深入指南。与大多数从 `tokio::main` 开始并手
 
 您应该对以下内容感到满意：
 - 所有权、借用和生命周期
-- 特征和泛型（包括`impl Trait`）
+- trait 和泛型（包括`impl Trait`）
 - 使用 `Result<T, E>` 和 `?` 运算符
 - 基本多线程（`std::thread::spawn`、`Arc`、`Mutex`）
 
@@ -29,7 +29,7 @@ Rust 中异步编程的深入指南。与大多数从 `tokio::main` 开始并手
 
 **第一次线性阅读。** 第 I 至第 III 部分相互构建。每章有：
 
-| 象征 | 意义 |
+| 符号 | 意义 |
 |--------|---------|
 | 🟢 | 初学者——基本概念 |
 | 🟡 | 中级——需要前面的章节 |
@@ -38,13 +38,13 @@ Rust 中异步编程的深入指南。与大多数从 `tokio::main` 开始并手
 每章包括：
 - 顶部的 **“您将学到什么”** 块
 - **Mermaid 图表** 适合视觉学习者
-- 带有隐藏解决方案的**内联练习**
+- 带有隐藏参考答案的**内联练习**
 - **关键要点**总结核心思想
 - **相关章节的交叉引用**
 
 ## 节奏指南
 
-| 章节 | 话题 | 建议时间 | 检查站 |
+| 章节 | 主题 | 建议时间 | 检查点 |
 |----------|-------|----------------|------------|
 | 1–5 | 异步如何工作 | 6-8小时 | 您可以解释 `Future`、`Poll`、`Pin`，以及为什么 Rust 没有内置 Runtime |
 | 6–10 | 生态系统 | 6-8小时 | 您可以手动构建 future，选择 Runtime，并使用 tokio 的 API |
@@ -53,12 +53,12 @@ Rust 中异步编程的深入指南。与大多数从 `tokio::main` 开始并手
 
 **预计总时间：22–30 小时**
 
-## 通过练习进行工作
+## 如何完成练习
 
 每个内容章节都有一个内联练习。Capstone（第 16 章）将所有内容集成到一个项目中。为了最大限度地学习：
 
-1. **在扩展解决方案之前先尝试练习**——挣扎是学习发生的地方
-2. **输入代码，不要复制粘贴** — 肌肉记忆对于 Rust 的语法很重要
+1. **在扩展参考答案之前先尝试练习**——卡住和思考正是学习发生的地方
+2. **手动敲代码，不要复制粘贴** — 肌肉记忆对于 Rust 的语法很重要
 3. **运行每个示例** — `cargo new async-exercises` 并进行测试
 
 ## 目录
@@ -75,8 +75,8 @@ Rust 中异步编程的深入指南。与大多数从 `tokio::main` 开始并手
 
 - [6. 手工构建 Future](ch06-building-futures-by-hand.md) 🟡 — TimerFuture、Join、Select 从头开始
 - [7. 执行器和 Runtime](ch07-executors-and-runtimes.md) 🟡 — tokio、smol、async-std、embassy — 如何选择
-- [8. Tokio 深入研究](ch08-tokio-deep-dive.md) 🟡 — Runtime 口味、生成、通道、同步原语
-- [9. 当 Tokio 不合适时](ch09-when-tokio-isnt-the-right-fit.md) 🟡 — LocalSet、FuturesUnordered，与Runtime 无关的设计
+- [8. Tokio 深入研究](ch08-tokio-deep-dive.md) 🟡 — Runtime 类型、spawn、通道、同步原语
+- [9. 当 Tokio 不合适时](ch09-when-tokio-isnt-the-right-fit.md) 🟡 — LocalSet、FuturesUnordered，与 Runtime 无关的设计
 - [10. 异步 trait](ch10-async-traits.md) 🟡 — RPITIT、dyn 调度、trait_variant、异步闭包
 
 ### 第三部分：生产异步
@@ -84,11 +84,11 @@ Rust 中异步编程的深入指南。与大多数从 `tokio::main` 开始并手
 - [11. 流和 AsyncIterator](ch11-streams-and-asynciterator.md) 🟡 — 异步迭代，AsyncRead/AsyncWrite，流组合器
 - [12. 常见陷阱](ch12-common-pitfalls.md) 🔴 — 9 个生产错误以及如何避免它们
 - [13. 生产模式](ch13-production-patterns.md) 🔴 — 优雅关闭、背压、Tower 中间件
-- [14. 异步是一种优化，而不是一种架构](ch14-async-is-an-optimization-not-an-architecture.md) 🔴 — Sync 核心/异步 shell，函数着色税
+- [14. 异步是一种优化，而不是一种架构](ch14-async-is-an-optimization-not-an-architecture.md) 🔴 — Sync 核心/异步 shell，函数着色成本
 
 ### 附录
 
-- [summary和参考卡](ch16-summary-and-reference-card.md) — 快速查找表和决策树
+- [总结和参考卡](ch16-summary-and-reference-card.md) — 快速查找表和决策树
 - [Capstone 项目：异步聊天服务器](ch17-capstone-project.md) — 构建一个完整的异步应用程序
 
 ***

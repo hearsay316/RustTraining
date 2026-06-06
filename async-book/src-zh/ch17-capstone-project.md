@@ -10,7 +10,7 @@
 > - 流：从 TCP 连接读取行（第 11 章）
 > - 常见陷阱：取消安全、MutexGuard 跨越 `.await`（第 12 章）
 > - 生产模式：正常关闭、背压（第 13 章）
-> - 可插入后端的异步特征（第 10 章）
+> - 可插入后端的异步 trait（第 10 章）
 
 ## 问题
 
@@ -23,16 +23,16 @@
 
 ```mermaid
 graph LR
-    C1["Client 1<br/>(Alice)"] -->|TCP| SERVER["Chat Server"]
-    C2["Client 2<br/>(Bob)"] -->|TCP| SERVER
-    C3["Client 3<br/>(Carol)"] -->|TCP| SERVER
+    C1["客户端 1<br/>（Alice）"] -->|TCP| SERVER["聊天服务器"]
+    C2["客户端 2<br/>（Bob）"] -->|TCP| SERVER
+    C3["客户端 3<br/>（Carol）"] -->|TCP| SERVER
 
-    SERVER --> R1["#general<br/>broadcast channel"]
-    SERVER --> R2["#rust<br/>broadcast channel"]
+    SERVER --> R1["#general<br/>broadcast 通道"]
+    SERVER --> R2["#rust<br/>broadcast 通道"]
 
-    R1 -->|msg| C1
-    R1 -->|msg| C2
-    R2 -->|msg| C3
+    R1 -->|消息| C1
+    R1 -->|消息| C2
+    R2 -->|消息| C3
 
     CTRL["Ctrl+C"] -->|watch| SERVER
 

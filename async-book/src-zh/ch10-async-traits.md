@@ -1,24 +1,24 @@
 # 10. 异步 trait🟡
 
 > **您将学到什么：**
-> - 为什么特征中的异步方法需要数年时间才能稳定
+> - 为什么trait 中的异步方法需要数年时间才能稳定
 > - RPITIT：原生异步 trait方法（Rust 1.75+）
 > - dyn调度挑战和`Send`通过`trait_variant`边界
 > - 异步闭包（Rust 1.85+）：`async Fn()` 和 `async FnOnce()`
 
 ```mermaid
 graph TD
-    subgraph "Async Trait Approaches"
+    subgraph "异步 trait 方案"
         direction TB
-        RPITIT["RPITIT (Rust 1.75+)<br/>async fn in trait<br/>Static dispatch only"]
-        VARIANT["trait_variant<br/>Auto-generates Send variant<br/>Static dispatch only"]
-        BOXED["Box&lt;dyn Future&gt;<br/>Manual boxing<br/>Works everywhere"]
-        CLOSURE["Async Closures (1.85+)<br/>async Fn() / async FnOnce()<br/>Callbacks & middleware"]
+        RPITIT["RPITIT（Rust 1.75+）<br/>trait 中的 async fn<br/>仅静态分发"]
+        VARIANT["trait_variant<br/>自动生成 Send 变体<br/>仅静态分发"]
+        BOXED["Box&lt;dyn Future&gt;<br/>手动装箱<br/>适用范围广"]
+        CLOSURE["Async Closures（1.85+）<br/>async Fn() / async FnOnce()<br/>回调和中间件"]
     end
 
-    RPITIT -->|"Need Send?"| VARIANT
-    RPITIT -->|"Need dyn?"| BOXED
-    CLOSURE -->|"Replaces"| BOXED
+    RPITIT -->|"需要 Send？"| VARIANT
+    RPITIT -->|"需要 dyn？"| BOXED
+    CLOSURE -->|"替代"| BOXED
 
     style RPITIT fill:#d4efdf,stroke:#27ae60,color:#000
     style VARIANT fill:#e8f4f8,stroke:#2980b9,color:#000
@@ -28,15 +28,15 @@ graph TD
 
 ## 历史：为什么花了这么长时间
 
-多年来，特征中的异步方法是 Rust 最受欢迎的功能。问题：
+多年来，trait 中的异步方法是 Rust 最受欢迎的功能。问题：
 
 ```rust
-// 直到 Rust 1.75（2023 年 12 月）才编译：
+// 这类写法直到 Rust 1.75（2023 年 12 月）才稳定可用：
 trait DataStore {
     async fn get(&self, key: &str) -> Option<String>;
 }
 // 为什么？因为 async fn 返回 `impl Future<Output = T>`，
-// 不支持trait 返回位置中的`impl Trait`。
+// 过去 trait 返回位置中的 `impl Trait` 尚不支持。
 ```
 
 根本挑战：当 trait 方法返回 `impl Future` 时，每个实现者返回一个*不同的具体类型*。编译器需要知道返回类型的大小，但是 trait 方法是动态调度的。
@@ -141,10 +141,10 @@ async fn spawn_lookup<S: SendDataStore + 'static>(store: Arc<S>) {
 // ⚠️ 注意：trait_variant 不启用 dyn 调度。
 // 生成的trait仍然使用`impl Future`，所以`dyn SendDataStore`
 // 不是对象安全的。对于dyn调度，仍然需要手动装箱
-// （参见上面的 Box::pin 方法）或使用 `async-trait` crate。
+// （参见上面的 Box::pin 方法），或者使用 `async-trait` crate。
 ```
 
-### 快速参考：异步特征
+### 快速参考：异步 trait
 
 | 方法 | 静态调度 | 动态调度 | Send | 语法开销 |
 |----------|:---:|:---:|:---:|---|
@@ -153,7 +153,7 @@ async fn spawn_lookup<S: SendDataStore + 'static>(store: Arc<S>) {
 | 说明书`Box::pin` | ✅ | ✅ | 显式的 | 高的 |
 | `async-trait`箱子 | ✅ | ✅ | `#[async_trait]` | 中（过程宏） |
 
-> **建议**：对于新代码（Rust 1.75+），请使用本机异步特征。添加
+> **建议**：对于新代码（Rust 1.75+），请使用本机异步 trait。添加
 > 当您需要 `Send` 边界来执行生成任务时，`trait_variant`。对于`dyn`
 > 调度，使用手册`Box::pin`或`async-trait`板条箱。当地人
 > 静态调度的方法是零成本的。
@@ -178,7 +178,7 @@ let fetchers: Vec<_> = urls.iter().map(|url| {
 }).collect();
 ```
 
-异步闭包实现了新的 `AsyncFn`、`AsyncFnMut` 和 `AsyncFnOnce` 特征，它们镜像 `Fn`、`FnMut`、`FnOnce`：
+异步闭包实现了新的 `AsyncFn`、`AsyncFnMut` 和 `AsyncFnOnce` trait，它们镜像 `Fn`、`FnMut`、`FnOnce`：
 
 ```rust
 // 接受 async 闭包的通用函数
@@ -199,12 +199,12 @@ where
 > 考虑切换到 `AsyncFn() -> T` 以获得更清晰的签名。
 
 <details>
-<summary><strong>🏋️ 练习：设计异步服务特征</strong>（点击展开）</summary>
+<summary><strong>🏋️ 练习：设计异步服务 trait</strong>（点击展开）</summary>
 
 **挑战**：使用异步 `get` 和 `set` 方法设计 `Cache` trait。实现两次：一次使用 `HashMap`（内存中），一次使用模拟 Redis 后端（使用 `tokio::time::sleep` 模拟网络延迟）。编写一个适用于两者的通用函数。
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust
 use std::collections::HashMap;
@@ -289,7 +289,7 @@ async fn main() {
 </details>
 </details>
 
-> **关键要点 — 异步特征**
+> **关键要点 — 异步 trait**
 > - 从Rust 1.75开始，你可以直接在traits中写入`async fn`（不需要`#[async_trait]` crate）
 > - `trait_variant::make` 自动生成用于生成任务的 `Send` 变体（仅限静态调度）
 > - 异步闭包 (`async Fn()`) 在 1.85 中稳定 — 用于回调和中间件

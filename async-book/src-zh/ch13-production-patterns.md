@@ -29,7 +29,7 @@ async fn main_server() {
 
     // 通知所有任务关闭
     // 注意：使用 .unwrap() 是为了简洁。生产代码应该处理
-    // 所有接收器均已掉落的情况。
+    // 所有接收器都已被丢弃的情况。
     shutdown_tx.send(true).unwrap();
 
     // 等待服务器完成（有超时）
@@ -84,9 +84,9 @@ async fn handle_connection(conn: Connection, mut shutdown: watch::Receiver<bool>
 
 ```mermaid
 sequenceDiagram
-    participant OS as OS Signal
-    participant Main as Main Task
-    participant WCH as watch Channel
+    participant OS as OS 信号
+    participant Main as 主 Task
+    participant WCH as watch 通道
     participant W1 as Worker 1
     participant W2 as Worker 2
 
@@ -95,12 +95,12 @@ sequenceDiagram
     WCH-->>W1: changed()
     WCH-->>W2: changed()
 
-    Note over W1: Finish current request
-    Note over W2: Finish current request
+    否te over W1: 完成当前请求
+    否te over W2: 完成当前请求
 
-    W1-->>Main: Task complete
-    W2-->>Main: Task complete
-    Main->>Main: All workers done → exit
+    W1-->>Main: Task 完成
+    W2-->>Main: Task 完成
+    Main->>Main: 所有 Worker 完成 → 退出
 ```
 
 ### 有界通道的背压
@@ -251,7 +251,7 @@ where
 **`thiserror` 与 `anyhow`** — 选择正确的工具：
 
 ```rust
-// thiserror：为库和公开 API 定义类型化错误
+// thiserror：适合为库和公开 API 定义类型化错误
 // 每个变体都是明确的——调用者可以匹配特定的错误
 use thiserror::Error;
 
@@ -270,7 +270,7 @@ enum DiagError {
     TaskPanic(#[from] tokio::task::JoinError),
 }
 
-// anyhow：为应用和原型快速处理错误
+// anyhow：适合应用程序和原型快速处理错误
 // 包装任何错误 - 无需为每种情况定义类型
 use anyhow::{Context, Result};
 
@@ -285,7 +285,7 @@ async fn run_diagnostics() -> Result<()> {
 
     Ok(())
 }
-// 无论如何打印：“GPU 诊断失败：IPMI 命令失败：超时”
+// anyhow 会打印：“GPU 诊断失败：IPMI 命令失败：超时”
 ```
 
 | 箱 | 使用时间 | 错误类型 | 匹配 |
@@ -324,7 +324,7 @@ async fn spawn_with_errors() -> Result<String, AppError> {
 **错误边界问题** — `tokio::spawn` 删除上下文：
 
 ```rust
-// ❌ 错误上下文在 spawn 边界上丢失：
+// ❌ 错误上下文在 spawn 边界处丢失：
 async fn bad_error_handling() -> Result<()> {
     let handle = tokio::spawn(async {
         some_fallible_work().await  // 返回 Result<T, SomeError>
@@ -336,7 +336,7 @@ async fn bad_error_handling() -> Result<()> {
     Ok(())
 }
 
-// ✅ 在 spawn 边界添加上下文：
+// ✅ 在 spawn 边界内补充上下文：
 async fn good_error_handling() -> Result<()> {
     let handle = tokio::spawn(async {
         some_fallible_work()
@@ -398,12 +398,12 @@ let service = ServiceBuilder::new()
 ### 练习：使用工作池正常关闭
 
 <details>
-<summary>🏋️锻炼（点击展开）</summary>
+<summary>🏋️ 练习（点击展开）</summary>
 
 **挑战**：构建一个任务处理器，具有基于通道的工作队列、N 个工作任务以及按 Ctrl+C 正常关闭。工作人员应在离开前完成飞行中的工作。
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust
 use tokio::sync::{mpsc, watch};
@@ -450,7 +450,7 @@ async fn main() {
     }
 
     // 收到 Ctrl+C 时：发出关闭信号，等待 worker
-    // 注意：.unwrap() 用于简洁 - 处理生产中的错误。
+    // 注意：这里用 .unwrap() 是为了简洁；生产代码应处理错误。
     tokio::signal::ctrl_c().await.unwrap();
     shutdown_tx.send(true).unwrap();
     for h in handles { let _ = h.await; }

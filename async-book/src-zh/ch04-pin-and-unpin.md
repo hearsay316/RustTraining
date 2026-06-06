@@ -8,7 +8,7 @@
 
 ## 为什么Pin存在
 
-这是asyncRust 中最容易混淆的概念。让我们逐步建立直觉。
+这是async Rust 中最容易混淆的概念。让我们逐步建立直觉。
 
 ### 问题：自指结构
 
@@ -39,16 +39,16 @@ enum ExampleStateMachine {
 
 ```mermaid
 graph LR
-    subgraph "Before Move (Valid)"
-        A["data: [1,2,3]<br/>at addr 0x1000"]
-        B["reference: 0x1000<br/>(points to data)"]
-        B -->|"valid"| A
+    subgraph "移动前（有效）"
+        A["data: [1,2,3]<br/>地址 0x1000"]
+        B["reference: 0x1000<br/>（指向 data）"]
+        B -->|"有效"| A
     end
 
-    subgraph "After Move (INVALID)"
-        C["data: [1,2,3]<br/>at addr 0x2000"]
-        D["reference: 0x1000<br/>(still points to OLD location!)"]
-        D -->|"dangling!"| E["💥 0x1000<br/>(freed/garbage)"]
+    subgraph "移动后（无效）"
+        C["data: [1,2,3]<br/>地址 0x2000"]
+        D["reference: 0x1000<br/>（仍指向旧位置！）"]
+        D -->|"悬垂！"| E["💥 0x1000<br/>（已释放/垃圾数据）"]
     end
 
     style E fill:#ffcdd2,color:#000
@@ -105,7 +105,7 @@ let future: Pin<Box<dyn Future<Output = i32>>> = Box::pin(async { 42 });
 
 // 3. tokio::pin!() — 将 Future 固定在栈上
 tokio::pin!(my_future);
-// 现在我的Future：Pin<&mut impl Future>
+// 此时 my_future 的类型类似 Pin<&mut impl Future>
 ```
 
 ### Unpin 逃生舱口
@@ -114,9 +114,9 @@ Rust 中的大多数类型都是 `Unpin` — 它们不包含自引用，因此�
 
 ```rust
 // 这些都是Unpin——固定它们没有什么特别的：
-// i32、String、Vec<T>、HashMap<K,V>、Box<T>、&T、&mut T
+// 这些普通类型都是 Unpin：i32、String、Vec<T>、HashMap<K,V>、Box<T>、&T、&mut T
 
-// 这些是 !Unpin — 它们必须在投票前固定：
+// 这些是 !Unpin — 它们必须在轮询前固定：
 // `async fn`和`async {}`生成的状态机
 
 // 实际意义：
@@ -135,7 +135,7 @@ impl Unpin for MySimpleFuture {} // “我可以安全移动，相信我”
 | 需要Unpin | 当您需要在创建后移动Future时 | `F: Future + Unpin` |
 
 <details>
-<summary><strong>🏋️练习：Pin和移动</strong>（点击展开）</summary>
+<summary><strong>🏋️ 练习：Pin 和移动</strong>（点击展开）</summary>
 
 **挑战**：以下哪些代码片段可以编译？对于每一个不符合要求的问题，请解释原因并予以解决。
 
@@ -159,7 +159,7 @@ let pinned = Pin::new(&mut fut);
 ```
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 **片段 A**： ✅ **编译。** `Box::pin()` 将Future放在堆上。移动 `Box` 会移动*指针*，而不是Future 本身。Future仍固定在其堆位置。
 
@@ -167,7 +167,7 @@ let pinned = Pin::new(&mut fut);
 ```rust
 let fut = async { 42 };
 tokio::pin!(fut);
-let moved = fut;        // 移动 Pin<&mut> 包装器 — OK
+let moved = fut;        // 移动 Pin<&mut> 这个指针包装器是允许的
 // fut.await;           // ❌ 错误：fut 已被移动
 let result = moved.await; // ✅ 使用移动代替
 ```

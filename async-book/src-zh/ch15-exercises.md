@@ -11,7 +11,7 @@
 - 当客户端连接/断开时打印日志
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -65,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 并发获取 URL 列表，最多 5 个并发请求。
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust
 use futures::stream::{self, StreamExt};
@@ -112,7 +112,7 @@ async fn fetch_urls(urls: Vec<String>) -> Vec<Result<String, String>> {
 - 按 Ctrl+C 优雅关闭：停止接受，完成正在进行的工作
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust
 use tokio::sync::{mpsc, watch};
@@ -199,7 +199,7 @@ async fn main() {
 *提示*：使用具有 1 个许可的 `tokio::sync::Semaphore` 来序列化访问。
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust
 use std::cell::UnsafeCell;
@@ -211,13 +211,13 @@ pub struct SimpleAsyncMutex<T> {
     semaphore: Arc<Semaphore>,
 }
 
-// 安全：对 T 的访问由信号量序列化（最多 1 个许可）。
+// SAFETY：对 T 的访问由信号量序列化（最多 1 个许可）。
 unsafe impl<T: Send> Send for SimpleAsyncMutex<T> {}
 unsafe impl<T: Send> Sync for SimpleAsyncMutex<T> {}
 
 pub struct SimpleGuard<T> {
     data: Arc<UnsafeCell<T>>,
-    _permit: OwnedSemaphorePermit, // 掉落在防护罩上 → 释放锁定
+    _permit: OwnedSemaphorePermit, // guard 被丢弃时释放锁
 }
 
 impl<T> SimpleAsyncMutex<T> {
@@ -240,7 +240,7 @@ impl<T> SimpleAsyncMutex<T> {
 impl<T> std::ops::Deref for SimpleGuard<T> {
     type Target = T;
     fn deref(&self) -> &T {
-        // 安全：我们拥有唯一的信号灯许可，因此没有其他信号灯许可
+        // SAFETY：我们拥有唯一的信号灯许可，因此没有其他信号灯许可
         // SimpleGuard 存在，因此保证独占访问。
         unsafe { &*self.data.get() }
     }
@@ -248,7 +248,7 @@ impl<T> std::ops::Deref for SimpleGuard<T> {
 
 impl<T> std::ops::DerefMut for SimpleGuard<T> {
     fn deref_mut(&mut self) -> &mut T {
-        // 安全：同样的道理——单一许可保证排他性。
+        // SAFETY：同样的道理——单一许可保证排他性。
         unsafe { &mut *self.data.get() }
     }
 }
@@ -286,7 +286,7 @@ impl<T> std::ops::DerefMut for SimpleGuard<T> {
 5. 收集结果
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust
 use futures::stream::{self, StreamExt};
@@ -326,7 +326,7 @@ async fn main() {
 *提示*：基于第 6 章中的 `Select` 组合器和同一章中的 `TimerFuture` 进行构建。
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust,ignore
 use std::future::Future;

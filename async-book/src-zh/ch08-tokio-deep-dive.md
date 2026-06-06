@@ -40,18 +40,18 @@ rt.block_on(async {
 
 ```mermaid
 graph TB
-    subgraph "Multi-Thread (default)"
-        MT_Q1["Thread 1<br/>Task A, Task D"]
-        MT_Q2["Thread 2<br/>Task B"]
-        MT_Q3["Thread 3<br/>Task C, Task E"]
-        STEAL["Work Stealing:<br/>idle threads steal from busy ones"]
+    subgraph "多线程（默认）"
+        MT_Q1["线程 1<br/>Task A、Task D"]
+        MT_Q2["线程 2<br/>Task B"]
+        MT_Q3["线程 3<br/>Task C、Task E"]
+        STEAL["工作窃取：<br/>空闲线程从繁忙线程窃取任务"]
         MT_Q1 <--> STEAL
         MT_Q2 <--> STEAL
         MT_Q3 <--> STEAL
     end
 
-    subgraph "Current-Thread"
-        ST_Q["Single Thread<br/>Task A → Task B → Task C → Task D"]
+    subgraph "当前线程"
+        ST_Q["单线程<br/>Task A → Task B → Task C → Task D"]
     end
 
     style MT_Q1 fill:#c8e6c9,color:#000
@@ -83,7 +83,7 @@ async fn example() {
 async fn problem() {
     let data = String::from("hello");
 
-    // ❌失败：数据是借用的，而不是'static
+    // ❌ 失败：data 是借用值，不满足 'static
     // task::spawn(async {
     //     println!("{data}"); // 借用了 `data`，不是 'static
     // });
@@ -127,7 +127,7 @@ async fn cancellation_example() {
     // 通过放下手柄来取消任务？否 — 任务会继续运行！
     // drop(handle)； // 任务在后台继续执行
 
-    // 要实际取消，请调用 abort()：
+    // 真正取消任务需要调用 abort()：
     handle.abort();
 
     // 等待中止的任务返回 JoinError
@@ -152,7 +152,7 @@ Tokio 提供异步感知的同步原语。关键原则：**不要在 `.await` �
 use tokio::sync::{Mutex, RwLock, Semaphore, mpsc, oneshot, broadcast, watch};
 
 // --- Mutex ---
-// 异步互斥量：lock()方法是async，不会阻塞线程
+// 异步 Mutex：lock() 是 async 方法，不会阻塞 OS 线程
 let data = Arc::new(Mutex::new(vec![1, 2, 3]));
 {
     let mut guard = data.lock().await; // 非阻塞锁
@@ -191,28 +191,28 @@ println!("Latest: {}", *rx.borrow());
 
 ```mermaid
 graph LR
-    subgraph "Channel Types"
+    subgraph "通道类型"
         direction TB
-        MPSC["mpsc<br/>N→1<br/>Buffered queue"]
-        ONESHOT["oneshot<br/>1→1<br/>Single value"]
-        BROADCAST["broadcast<br/>N→N<br/>All receivers get all"]
-        WATCH["watch<br/>1→N<br/>Latest value only"]
+        MPSC["mpsc<br/>N→1<br/>有缓冲队列"]
+        ONESHOT["oneshot<br/>1→1<br/>单个值"]
+        BROADCAST["broadcast<br/>N→N<br/>所有接收者都收到"]
+        WATCH["watch<br/>1→N<br/>只保留最新值"]
     end
 
-    P1["Producer 1"] --> MPSC
-    P2["Producer 2"] --> MPSC
-    MPSC --> C1["Consumer"]
+    P1["生产者 1"] --> MPSC
+    P2["生产者 2"] --> MPSC
+    MPSC --> C1["消费者"]
 
-    P3["Producer"] --> ONESHOT
-    ONESHOT --> C2["Consumer"]
+    P3["生产者"] --> ONESHOT
+    ONESHOT --> C2["消费者"]
 
-    P4["Producer"] --> BROADCAST
-    BROADCAST --> C3["Consumer 1"]
-    BROADCAST --> C4["Consumer 2"]
+    P4["生产者"] --> BROADCAST
+    BROADCAST --> C3["消费者 1"]
+    BROADCAST --> C4["消费者 2"]
 
-    P5["Producer"] --> WATCH
-    WATCH --> C5["Consumer 1"]
-    WATCH --> C6["Consumer 2"]
+    P5["生产者"] --> WATCH
+    WATCH --> C5["消费者 1"]
+    WATCH --> C6["消费者 2"]
 ```
 
 ## 案例研究：为通知服务选择正确的渠道
@@ -234,11 +234,11 @@ graph LR
 
 ```mermaid
 graph LR
-    subgraph "Notification Service"
+    subgraph "通知服务"
         direction TB
         API1["API Handler 1"] -->|mpsc| BATCH["Batcher"]
         API2["API Handler 2"] -->|mpsc| BATCH
-        CONFIG["Config Watcher"] -->|watch| RATE["Rate Limiter"]
+        CONFIG["配置 Watcher"] -->|watch| RATE["限速器"]
         CTRL["Ctrl+C"] -->|broadcast| API1
         CTRL -->|broadcast| BATCH
         CTRL -->|broadcast| RATE
@@ -253,12 +253,12 @@ graph LR
 ```
 
 <details>
-<summary><strong>🏋️练习：构建任务池</strong>（点击展开）</summary>
+<summary><strong>🏋️ 练习：构建任务池</strong>（点击展开）</summary>
 
 **挑战**：构建一个函数`run_with_limit`，接受异步闭包列表和并发限制，最多同时执行 N 个任务。使用`tokio::sync::Semaphore`。
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust
 use std::future::Future;

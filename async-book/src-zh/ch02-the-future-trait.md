@@ -31,33 +31,33 @@ pub enum Poll<T> {
 sequenceDiagram
     participant E as Executor
     participant F as Future (Task)
-    participant OS as Operating System<br/>(e.g., epoll/kqueue)
+    participant OS as 操作系统<br/>（例如 epoll/kqueue）
     participant R as Reactor (Runtime)
 
-    E->>F: Calls poll(cx)
-    Note right of F: Future attempts operation
-    F->>OS: Syscall (e.g., read TCP socket)
-    OS-->>F: Returns Error: Not Ready
+    E->>F: 调用 poll(cx)
+    否te right of F: Future 尝试执行操作
+    F->>OS: 系统调用（例如读取 TCP socket）
+    OS-->>F: 返回错误：尚未 Ready
     
-    F->>R: Registers: (Waker)
-    F-->>E: Returns Poll::Pending
-    Note left of E: Task is moved out<br/>of run queue
+    F->>R: 注册 Waker
+    F-->>E: 返回 Poll::Pending
+    否te left of E: Task 移出<br/>运行队列
 
-    E->>E: (Executor runs other tasks OR sleeps)
-    R->>OS: epoll_wait() / Polls OS for events
+    E->>E: (Executor 运行其他 Task 或休眠)
+    R->>OS: epoll_wait() / 轮询 OS 事件
 
-    Note right of OS: (Sometime Later) New data arrives
-    OS-->>R: Wakes Reactor: data is NOW READY
+    否te right of OS: (稍后) 新数据到达
+    OS-->>R: 唤醒 Reactor：数据已 Ready
     
-    R->>R: Reactor finds Waker
-    R->>E: Calls Waker::wake()
-    Note right of E: Task is pushed back<br/>to Executor's run queue
+    R->>R: Reactor 找到 Waker
+    R->>E: 调用 Waker::wake()
+    否te right of E: Task 推回<br/>Executor 运行队列
 
-    E->>F: Calls poll(cx) again
-    Note right of F: Future attempts operation again
-    F->>OS: Syscall (e.g., read TCP socket)
-    OS-->>F: Success: Returns Data Buffer
-    F-->>E: Returns Poll::Ready(Data)
+    E->>F: 调用 poll(cx) again
+    否te right of F: Future 尝试执行操作 again
+    F->>OS: 系统调用（例如读取 TCP socket）
+    OS-->>F: 成功：返回数据缓冲区
+    F-->>E: 返回 Poll::Ready(Data)
 ```
 
 让我们分解每一部分：
@@ -141,7 +141,7 @@ impl Future for Delay {
 
                 // 关键：唤醒执行器，让它再次轮询我们
                 if let Some(w) = waker.lock().unwrap().take() {
-                    w.wake(); // “嘿执行器，我准备好了——投票给我again!”
+                    w.wake(); // “嘿执行器，我准备好了——再次轮询我!”
                 }
             });
         }
@@ -163,14 +163,14 @@ impl Future for Delay {
 ### 练习：实现 CountdownFuture
 
 <details>
-<summary>🏋️锻炼（点击展开）</summary>
+<summary>🏋️ 练习（点击展开）</summary>
 
 **挑战**：实现一个从 N 到 0 倒数的 `CountdownFuture`，每次轮询时打印当前计数。当达到 0 时，以 `Ready("Liftoff!")` 结束。
 
 *提示*：Future 需要存储当前计数并在每次轮询时递减。请记住始终重新注册 Waker！
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust
 use std::future::Future;
@@ -197,7 +197,7 @@ impl Future for CountdownFuture {
         } else {
             println!("{}...", self.count);
             self.count -= 1;
-            cx.waker().wake_by_ref(); // 立即安排重新投票
+            cx.waker().wake_by_ref(); // 立即安排重新轮询
             Poll::Pending
         }
     }

@@ -36,7 +36,7 @@ impl TimerFuture {
             waker: None,
         }));
 
-        // 生成一个线程，在持续时间后设置completed=true
+        // 生成一个后台线程，在指定时长后把 completed 置为 true
         let thread_shared_state = Arc::clone(&shared_state);
         thread::spawn(move || {
             thread::sleep(duration);
@@ -76,7 +76,7 @@ impl Future for TimerFuture {
 // }
 //
 // ⚠️ 这会为每个计时器生成一个 OS 线程 — 非常适合学习，但在
-// 生产使用 `tokio::time::sleep` 由共享支持
+// 生产代码应使用 `tokio::time::sleep`，它由共享计时器支持
 // 计时器轮并且需要零额外线程。
 ```
 
@@ -89,7 +89,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-/// 同时轮询两个 Future，将两个结果作为元组返回
+///// 并发轮询两个 Future，并把两个结果作为元组返回
 pub struct Join<A, B>
 where
     A: Future,
@@ -181,12 +181,12 @@ where
 
 ```mermaid
 graph LR
-    subgraph "Future Combinators"
+    subgraph "Future 组合器"
         direction TB
-        TIMER["TimerFuture<br/>Single future, wake after delay"]
-        JOIN["Join&lt;A, B&gt;<br/>Wait for BOTH"]
-        SELECT["Select&lt;A, B&gt;<br/>Wait for FIRST"]
-        RETRY["RetryFuture<br/>Re-create on failure"]
+        TIMER["TimerFuture<br/>单个 Future，延迟后唤醒"]
+        JOIN["Join&lt;A, B&gt;<br/>等待两者完成"]
+        SELECT["Select&lt;A, B&gt;<br/>等待第一个完成"]
+        RETRY["RetryFuture<br/>失败后重新创建"]
     end
 
     TIMER --> JOIN
@@ -213,7 +213,7 @@ pub enum Either<A, B> {
     Right(B),
 }
 
-/// 返回先完成的 Future；丢弃另一个
+///// 返回先完成的 Future，并丢弃另一个
 pub struct Select<A, B> {
     a: A,
     b: B,
@@ -269,7 +269,7 @@ where
 *提示*：您需要“正在尝试”和“已用尽所有尝试”的状态。
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust
 use std::future::Future;

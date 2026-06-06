@@ -36,5 +36,5 @@
 
 # 附录
 
-- [摘要和参考卡](ch16-summary-and-reference-card.md)
+- [总结和参考卡](ch16-summary-and-reference-card.md)
 - [Capstone 项目：异步聊天服务器](ch17-capstone-project.md)

@@ -33,7 +33,7 @@ Bob Nystrom 的 [“你的职能是什么颜色？”](https://journal.stuffwith
 
 - **栈内存：** 每个操作系统线程保留 8MB 的虚拟地址空间（Linux 默认），但操作系统仅提交所触及的页面 - 大部分空闲的线程使用 20-80KB 的物理内存。
 - **Context 开关：** 现代硬件上约为 1-5μs。对于 50 个并发请求，这是噪音。在 100K 开关/秒的情况下，它是可以测量的。
-- **创建成本：** Linux 上每个线程约为 10-30μs。线程池（人造丝，`std::thread::scope`）将其摊销为零。
+- **创建成本：** Linux 上每个线程约为 10-30μs。线程池（rayon，`std::thread::scope`）将其摊销为零。
 
 异步获得其复杂性的诚实阈值大约是 **1K-10K 并发大部分空闲连接** - 每个连接栈成为实际成本的 epoll/io_uring 最佳点。在此之下，线程池更简单，调试速度更快，而且足够快。除此之外，异步获胜。大多数服务都低于这个水平。
 
@@ -66,7 +66,7 @@ pub async fn process_order(order: Order) -> Result<Receipt, OrderError> {
     let discount = discount_service.lookup(order.customer_id).await?;
     let final_price = pricing.apply_discount(discount);
 
-    // 第 5 步：格式化收据 — 纯函数
+    // 第 5 步：格式化收据，纯函数
     Ok(Receipt::new(order, final_price))
 }
 ```
@@ -177,14 +177,14 @@ async fn process_order_integration() {
 | 需要`#[tokio::test]`的单元测试数量 | 他们全部 | **仅集成测试** |
 | I/O 故障与逻辑错误纠缠在一起 | 是的 — 一种 `Result` 类型适用于两者 | **否** — 同步返回逻辑错误，shell 处理 I/O 错误 |
 | `validate_order` 可在 CLI / WASM / 批处理中重用 | 否 — 传递性地引入 tokio | **是** — 纯净`fn` |
-| 通过业务逻辑进行栈跟踪 | 与Runtime帧交错 | **干净的** |
+| 通过业务逻辑进行栈跟踪 | 与 Runtime帧交错 | **干净的** |
 | 稍后可以将 HTTP 客户端替换为 gRPC | 需要改变核心功能 | **仅更改外壳** |
 
 关键见解：**步骤 2 和 4 中的 I/O 调用*不需要*位于业务逻辑内部。它们是它的输入。** 同步核心将 `StockResult` 和 `Discount` 作为参数。这些值的来源——HTTP、gRPC、测试装置、缓存——是 shell 关心的问题。
 
 ## `spawn_blocking` 气味
 
-第 12 章介绍了 `spawn_blocking` 作为意外阻止执行器的修复。当您有一次性阻塞调用时，这是正确的解决方案 - `std::fs::read`、压缩库、遗留的 FFI 函数。
+第 12 章介绍了 `spawn_blocking` 作为意外阻止执行器的修复。当您有一次性阻塞调用时，这是正确的参考答案 - `std::fs::read`、压缩库、遗留的 FFI 函数。
 
 但如果您发现自己将大段代码包装在 `spawn_blocking` 中：
 
@@ -234,7 +234,7 @@ async fn handler() -> Json<Report> {
     Json(report)
 }
 
-// 来电者 C：大量分析 — 来电者决定卸载
+// 调用方 C：大量分析 — 调用方决定是否卸载到后台线程
 async fn handler_heavy() -> Json<Report> {
     let data = data.clone();
     let report = tokio::task::spawn_blocking(move || {
@@ -274,13 +274,13 @@ let report = tokio::runtime::Runtime::new().unwrap().block_on(
 
 ```mermaid
 graph TD
-    START["Should this function be async?"] --> IO{"Does it do I/O?"}
-    IO -->|No| SYNC["sync fn — always"]
-    IO -->|Yes| BOUNDARY{"Is it at the boundary?<br/>handler, main loop, accept()"}
-    BOUNDARY -->|Yes| ASYNC_SHELL["async fn — this is the shell"]
-    BOUNDARY -->|No| CORE_IO{"Is the I/O the core logic?<br/>fan-out, streaming, stateful conn"}
-    CORE_IO -->|Yes| ASYNC_CORE["async fn — justified"]
-    CORE_IO -->|No| EXTRACT["Extract logic into sync fn.<br/>Pass I/O results in as arguments."]
+    START["这个函数应该是 async 吗？"] --> IO{"是否执行 I/O？"}
+    IO -->|否| SYNC["sync fn，始终如此"]
+    IO -->|是| BOUNDARY{"是否位于边界？<br/>handler、主循环、accept()"}
+    BOUNDARY -->|是| ASYNC_SHELL["async fn，这是 shell"]
+    BOUNDARY -->|否| CORE_IO{"I/O 是否是核心逻辑？<br/>fan-out、streaming、有状态连接"}
+    CORE_IO -->|是| ASYNC_CORE["async fn，合理"]
+    CORE_IO -->|否| EXTRACT["把逻辑提取为 sync fn。<br/>将 I/O 结果作为参数传入。"]
 
     style SYNC fill:#d4efdf,stroke:#27ae60,color:#000
     style ASYNC_SHELL fill:#e8f4f8,stroke:#2980b9,color:#000
@@ -293,7 +293,7 @@ graph TD
 ---
 
 <details>
-<summary><strong>🏋️练习：提取Sync核心</strong>（点击展开）</summary>
+<summary><strong>🏋️ 练习：提取 Sync 核心</strong>（点击展开）</summary>
 
 以下axum处理程序具有异步污染——业务逻辑与I/O混合。将其重构为同步核心模块和瘦异步外壳。
 
@@ -301,7 +301,7 @@ graph TD
 use axum::{Json, extract::Path};
 
 async fn get_device_report(Path(device_id): Path<String>) -> Result<Json<Report>, AppError> {
-    // 从设备通过 HTTP 获取原始遥测数据
+    // 从设备通过 HTTP 从设备获取原始遥测数据
     let raw = reqwest::get(format!("http://bmc-{device_id}/telemetry"))
         .await?
         .json::<RawTelemetry>()
@@ -359,7 +359,7 @@ async fn get_device_report(Path(device_id): Path<String>) -> Result<Json<Report>
 - 您需要定义构建测试装置的小型测试辅助函数（例如，`raw_telemetry()`、`sensor()`、`reading()`、`device_meta()`）。从使用情况来看，他们的签名应该是显而易见的。
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust
 // core.rs — 零 async 依赖
@@ -494,7 +494,7 @@ fn normal_report() {
 > **要点：**
 >
 > 1. 异步是一种**I/O 复用优化**，而不是一种应用程序架构。大多数业务逻辑是同步的。
-> 2. **Sync核心，异步shell：**将业务规则保留在以I/O结果作为参数的纯同步函数中。异步 shell 协调获取并调用核心。
+> 2. **Sync 核心，异步shell：**将业务规则保留在以I/O结果作为参数的纯同步函数中。异步 shell 协调获取并调用核心。
 > 3. 如果您将大块包装在 `spawn_blocking` 中，**边界位于错误的位置** — 将逻辑重构为同步模块。
 > 4. **库应该默认同步 API。** 异步库强制所有调用者进入Runtime；同步库让调用者拥有异步边界。
 > 5. 异步因**扇出/扇入、流式传输和有状态连接**而赢得一席之地——在并发*是*业务逻辑的情况下。

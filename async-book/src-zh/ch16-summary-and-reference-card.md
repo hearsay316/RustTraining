@@ -1,4 +1,4 @@
-# 摘要和参考卡
+# 总结和参考卡
 
 ## 快速参考卡
 
@@ -83,9 +83,9 @@ Need concurrent futures?
 | 错误 | 原因 | 使固定 |
 |-------|-------|-----|
 | `future is not Send` | 在 `.await` 上按住 `!Send` 字 | 调整值的范围，使其在 `.await` 之前被删除，或使用 `current_thread` Runtime |
-| `borrowed value does not live long enough` 出生时 | `tokio::spawn`需要`'static` | 使用 `Arc`、`clone()` 或 `FuturesUnordered` |
-| `the trait Future is not implemented for ()` | 失踪`.await` | 将 `.await` 添加到异步调用中 |
-| 投票中`cannot borrow as mutable` | 自引用借用 | 正确使用 `Pin<&mut Self>`（参见第 4 章） |
+| `borrowed value does not live long enough` 生命周期不足 | `tokio::spawn`需要`'static` | 使用 `Arc`、`clone()` 或 `FuturesUnordered` |
+| `the trait Future is not implemented for ()` | 缺少 `.await` | 将 `.await` 添加到异步调用中 |
+| `poll` 中 `cannot borrow as mutable` | 自引用借用 | 正确使用 `Pin<&mut Self>`（参见第 4 章） |
 | 程序静静地挂起 | 忘记打电话`waker.wake()` | 确保每个`Pending`路径注册并触发Waker |
 
 ### 进一步阅读
@@ -95,7 +95,7 @@ Need concurrent futures?
 | [Tokio 教程](https://tokio.rs/tokio/tutorial) | 官方实践指南——非常适合第一个项目 |
 | [异步书（官方）](https://rust-lang.github.io/async-book/) | 涵盖语言级别的`Future`、`Pin`、`Stream` |
 | [Jon Gjengset — Rust 的外壳：async/await](https://www.youtube.com/watch?v=ThjvMReOXYM) | 通过实时编码进行 2 小时深入了解内部结构 |
-| [Alice Ryhl — Tokio 的演员](https://ryhl.io/blog/actors-with-tokio/) | 有状态服务的生产架构模式 |
+| [Alice Ryhl — Tokio Actor 模式](https://ryhl.io/blog/actors-with-tokio/) | 有状态服务的生产架构模式 |
 | [没有船 - Pin、Unpin，以及为什么 Rust 需要它们](https://without.boats/blog/pin/) | 语言设计者的最初动机 |
 | [Tokio 迷你Redis](https://github.com/tokio-rs/mini-redis) | 完成异步 Rust项目——研究质量的生产代码 |
 | [Tower 文档](https://docs.rs/tower) | axum、tonic、hyper 使用的中间件/服务架构 |

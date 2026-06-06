@@ -12,12 +12,12 @@
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Idle : Future created
-    Idle --> Polling : executor calls poll()
+    [*] --> Idle : 创建 Future
+    Idle --> Polling : Executor 调用 poll()
     Polling --> Complete : Ready(value)
     Polling --> Waiting : Pending
-    Waiting --> Polling : waker.wake() called
-    Complete --> [*] : Value returned
+    Waiting --> Polling : 调用 waker.wake()
+    Complete --> [*] : 返回值
 ```
 
 > **重要提示：**当处于*等待*状态时，Future**必须**已注册
@@ -35,7 +35,7 @@ use std::pin::Pin;
 /// 最简单的执行器：忙循环轮询直到 Ready
 fn block_on<F: Future>(mut future: F) -> F::Output {
     // 将 Future 固定在栈上
-    // 安全： `future` 在这一点之后永远不会移动 - 我们只
+    // SAFETY： `future` 在这一点之后永远不会移动 - 我们只
     // 通过固定参考访问它，直到完成。
     let mut future = unsafe { Pin::new_unchecked(&mut future) };
 
@@ -47,7 +47,7 @@ fn block_on<F: Future>(mut future: F) -> F::Output {
         RawWaker::new(std::ptr::null(), vtable)
     }
 
-    // 安全： noop_raw_waker() 返回具有正确 vtable 的有效 RawWaker。
+    // SAFETY： noop_raw_waker() 返回具有正确 vtable 的有效 RawWaker。
     let waker = unsafe { Waker::from_raw(noop_raw_waker()) };
     let mut cx = Context::from_waker(&waker);
 
@@ -57,7 +57,7 @@ fn block_on<F: Future>(mut future: F) -> F::Output {
             Poll::Ready(value) => return value,
             Poll::Pending => {
                 // 真正的执行器会将线程停放在这里
-                // 等待 waker.wake() — 我们只是旋转
+                // 等待 waker.wake()；这里为了演示只做自旋
                 std::thread::yield_now();
             }
         }
@@ -95,7 +95,7 @@ fn executor_loop(tasks: &mut TaskQueue) {
         }
 
         // 2. 睡眠直到有东西唤醒我们（epoll_wait、kevent等）
-        //    这就是 mio/polling 完成繁重工作的地方
+        //    这里由 mio/polling 负责等待 OS 事件
         tasks.wait_for_events(); // 阻塞直到 I/O 事件或Waker触发
     }
 }
@@ -137,10 +137,10 @@ impl Future for MyFuture {
 
 **挑战**：实现一个包含共享 `Arc<AtomicBool>` 标志的 `FlagFuture`。轮询时，它检查标志是否为`true`。如果是这样，则以 `Ready(())` 结束。如果不是，则存储Waker并返回 `Pending`。变化是：Future 必须正确处理**虚假唤醒**——它必须在每次轮询中重新检查标志，永远不要假设标志只是因为被唤醒而被设置。
 
-*提示*：您需要一个 `Arc<Mutex<Option<Waker>>>` （或类似的），以便外部线程可以设置标志并唤醒Future。使用 `poll_fn` 获得简洁的替代解决方案。
+*提示*：您需要一个 `Arc<Mutex<Option<Waker>>>` （或类似的），以便外部线程可以设置标志并唤醒Future。使用 `poll_fn` 获得简洁的替代参考答案。
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust
 use std::future::Future;
@@ -219,11 +219,11 @@ use std::task::Poll;
 
 // poll_fn：从闭包创建一次性 Future
 let value = poll_fn(|cx| {
-    // 用cx.waker()做某事，返回 Ready 或 Pending
+    // 使用 cx.waker() 注册唤醒逻辑，返回 Ready 或 Pending
     Poll::Ready(42)
 }).await;
 
-// 实际使用：将基于回调的 API 桥接到 async
+// 实际用途：把基于回调的 API 桥接到 async
 async fn read_when_ready(source: &MySource) -> Data {
     poll_fn(|cx| source.poll_read(cx)).await
 }

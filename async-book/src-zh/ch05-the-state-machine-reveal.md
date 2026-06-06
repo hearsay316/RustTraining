@@ -4,11 +4,11 @@
 > - 编译器如何将 `async fn` 转换为枚举状态机
 > - 并排比较：源代码与生成的状态
 > - 为什么`async fn`中的大栈分配会导致Future 的大小增大
-> - 掉落优化：一旦不再需要，数值就会掉落
+> - 丢弃优化：一旦不再需要，值就会被丢弃
 
 ## 编译器实际生成什么
 
-当您编写 `async fn` 时，编译器会将您的顺序代码转换为基于枚举的状态机。理解这种转换是理解 async Rust 的性能特征及其许多怪癖的关键。
+当您编写 `async fn` 时，编译器会将您的顺序代码转换为基于枚举的状态机。理解这种转换是理解 async Rust 的性能特性及其许多怪癖的关键。
 
 ### 并排：async fn 与状态机
 
@@ -85,12 +85,12 @@ impl Future for FetchTwoPagesStateMachine {
 ```mermaid
 stateDiagram-v2
     [*] --> Start
-    Start --> WaitingPage1: Create http_get future #1
+    Start --> WaitingPage1: 创建 http_get Future #1
     WaitingPage1 --> WaitingPage1: poll() → Pending
     WaitingPage1 --> WaitingPage2: poll() → Ready(page1)
     WaitingPage2 --> WaitingPage2: poll() → Pending
     WaitingPage2 --> Complete: poll() → Ready(page2)
-    Complete --> [*]: Return format!("{page1}\\n{page2}")
+    Complete --> [*]: 返回 format!("{page1}\\n{page2}")
 ```
 
 > **注明内容：**
@@ -110,7 +110,7 @@ async fn small() {
     let b: u8 = 0;
     yield_now().await;
 }
-// 尺寸 ≈ max(size_of(u8), size_of(u8)) + 判别式 + Future 尺寸
+// 大小 ≈ max(size_of(u8), size_of(u8)) + 判别式 + Future 尺寸
 //      small!
 
 async fn big() {
@@ -132,7 +132,7 @@ async fn big() {
 ### 练习：预测状态机
 
 <details>
-<summary>🏋️锻炼（点击展开）</summary>
+<summary>🏋️ 练习（点击展开）</summary>
 
 **挑战**：给定这个异步函数，画出编译器生成的状态机。它有多少个状态（枚举变体）？每个中存储什么值？
 
@@ -146,7 +146,7 @@ async fn pipeline(url: &str) -> Result<usize, Error> {
 ```
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 五个状态：
 

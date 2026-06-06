@@ -5,18 +5,18 @@
 > - `LocalSet` 代表 `!Send` Future
 > - `FuturesUnordered` 用于借用友好的并发（无需生成）
 > - `JoinSet` 用于托管任务组
-> - 编写与Runtime 无关的库
+> - 编写与 Runtime 无关的库
 
 ```mermaid
 graph TD
-    START["Need concurrent futures?"] --> STATIC{"Can futures be 'static?"}
-    STATIC -->|Yes| SEND{"Are futures Send?"}
-    STATIC -->|No| FU["FuturesUnordered<br/>Runs on current task"]
-    SEND -->|Yes| SPAWN["tokio::spawn<br/>Multi-threaded"]
-    SEND -->|No| LOCAL["LocalSet<br/>Single-threaded"]
-    SPAWN --> MANAGE{"Need to track/abort tasks?"}
-    MANAGE -->|Yes| JOINSET["JoinSet / TaskTracker"]
-    MANAGE -->|No| HANDLE["JoinHandle"]
+    START["需要并发 Future？"] --> STATIC{"Future 能否满足 'static？"}
+    STATIC -->|是| SEND{"Future 是否为 Send？"}
+    STATIC -->|否| FU["FuturesUnordered<br/>在当前 Task 上运行"]
+    SEND -->|是| SPAWN["tokio::spawn<br/>多线程"]
+    SEND -->|否| LOCAL["LocalSet<br/>单线程"]
+    SPAWN --> MANAGE{"需要跟踪/中止 Task？"}
+    MANAGE -->|是| JOINSET["JoinSet / TaskTracker"]
+    MANAGE -->|否| HANDLE["JoinHandle"]
 
     style START fill:#f5f5f5,stroke:#333,color:#000
     style FU fill:#d4efdf,stroke:#27ae60,color:#000
@@ -73,7 +73,7 @@ async fn process_items(items: &[String]) {
     let futures: FuturesUnordered<_> = items
         .iter()
         .map(|item| async move {
-            // ✅ 可以借东西 — 不可以 spawn，不可以 'static needed!
+            // ✅ 可以借用数据；没有 spawn，也就不要求 'static
             process(item).await
         })
         .collect();
@@ -91,7 +91,7 @@ use tokio::task::LocalSet;
 let local_set = LocalSet::new();
 local_set.run_until(async {
     tokio::task::spawn_local(async {
-        // 此处可以使用 Rc、Cell 和其他 !Send 类型
+        // 这里可以使用 Rc、Cell 等 !Send 类型
         let rc = std::rc::Rc::new(42);
         println!("{rc}");
     }).await.unwrap();
@@ -108,7 +108,7 @@ async fn with_joinset() {
 
     for i in 0..10 {
         // i 是 Copy，并被移入闭包；它已经满足 'static。
-        // 您仍然需要 Arc 或克隆来借用数据。
+        // 对于被借用的数据，仍然需要 Arc 或 clone。
         set.spawn(async move {
             tokio::time::sleep(Duration::from_millis(100)).await;
             i * 2
@@ -137,12 +137,12 @@ async fn with_joinset() {
 // ❌ 不好：图书馆将 tokio 强加给用户
 pub async fn my_lib_function() {
     tokio::time::sleep(Duration::from_secs(1)).await;
-    // 现在您的用户必须使用 tokio
+    // 这样会强迫库用户也使用 tokio
 }
 
-// ✅ 好：库与Runtime无关
+// ✅ 好：库与 Runtime 无关
 pub async fn my_lib_function() {
-    // 仅使用 std::future 和 futures crate中的类型
+    // 只依赖 std::future 和 futures crate 中的类型
     do_computation().await;
 }
 
@@ -171,14 +171,14 @@ where
 > 这使得生态系统保持可组合性。
 
 <details>
-<summary><strong>🏋️练习：FuturesUnordered vs Spawn</strong>（点击展开）</summary>
+<summary><strong>🏋️ 练习：FuturesUnordered vs Spawn</strong>（点击展开）</summary>
 
 **挑战**：以两种方式编写相同的函数 - 一次使用 `tokio::spawn`（需要 `'static`），一次使用 `FuturesUnordered`（借用数据）。该函数接收 `&[String]` 并在模拟异步查找后返回每个字符串的长度。
 
 比较：哪种方法需要`.clone()`？哪个可以借用输入切片？
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust
 use futures::stream::{FuturesUnordered, StreamExt};

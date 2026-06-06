@@ -35,20 +35,20 @@ async fn also_good_handler() -> String {
 
 ```mermaid
 graph TB
-    subgraph "❌ Blocking Call on Executor"
-        T1_BAD["Thread 1: std::fs::read()<br/>🔴 BLOCKED for 500ms"]
-        T2_BAD["Thread 2: handling requests<br/>🟢 Working alone"]
-        TASKS_BAD["100 pending tasks<br/>⏳ Starved"]
-        T1_BAD -->|"can't poll"| TASKS_BAD
+    subgraph "❌ Executor 上的阻塞调用"
+        T1_BAD["线程 1：std::fs::read()<br/>🔴 阻塞 500ms"]
+        T2_BAD["线程 2：处理请求<br/>🟢 独自工作"]
+        TASKS_BAD["100 个 Pending Task<br/>⏳ 饥饿"]
+        T1_BAD -->|"无法 poll"| TASKS_BAD
     end
 
     subgraph "✅ spawn_blocking"
-        T1_GOOD["Thread 1: polling futures<br/>🟢 Available"]
-        T2_GOOD["Thread 2: polling futures<br/>🟢 Available"]
-        BT["Blocking pool thread:<br/>std::fs::read()<br/>🔵 Separate pool"]
-        TASKS_GOOD["100 tasks<br/>✅ All making progress"]
-        T1_GOOD -->|"polls"| TASKS_GOOD
-        T2_GOOD -->|"polls"| TASKS_GOOD
+        T1_GOOD["线程 1：轮询 Future<br/>🟢 可用"]
+        T2_GOOD["线程 2：轮询 Future<br/>🟢 可用"]
+        BT["阻塞线程池：<br/>std::fs::read()<br/>🔵 独立线程池"]
+        TASKS_GOOD["100 个 Task<br/>✅ 都在推进"]
+        T1_GOOD -->|"轮询"| TASKS_GOOD
+        T2_GOOD -->|"轮询"| TASKS_GOOD
     end
 ```
 
@@ -69,7 +69,7 @@ async fn good_delay() {
 ### 按住MutexGuard穿过.await
 
 ```rust
-use std::sync::Mutex; // std Mutex 不感知 async
+use std::sync::Mutex; // std Mutex 不感知 async，可能阻塞 Executor 线程
 
 // ⚠️ 有风险：MutexGuard 横跨.await
 async fn bad_mutex(data: &Mutex<Vec<String>>) {
@@ -114,7 +114,7 @@ async fn scoped_mutex(data: &Mutex<Vec<String>>) {
 //    如果两个推送是独立的，那么这很好，但如果是“另一个”，则错误
 //    取决于“item”设置的状态。
 
-// 选项 2：使用 tokio::sync::Mutex — 在 .await 上保持锁定，无需
+// 方案 2：使用 tokio::sync::Mutex，可以跨 .await 持有锁而不阻塞 OS 线程
 //           阻塞OS线程。当您需要交易时最好
 //           跨 await 点进行读取-修改-写入。
 use tokio::sync::Mutex as AsyncMutex;
@@ -122,13 +122,13 @@ use tokio::sync::Mutex as AsyncMutex;
 async fn async_mutex(data: &AsyncMutex<Vec<String>>) {
     let mut guard = data.lock().await; // 异步锁——不阻塞线程
     guard.push("item".into());
-    some_io().await; // 好的 — tokio Mutex 守卫是 Send
+    some_io().await; // 可以这样做：tokio Mutex guard 是 Send
     guard.push("another".into());
     // 守卫一直在守卫——没有 TOCTOU 竞赛，没有线程被阻塞。
 }
 ```
 
-> **何时使用which Mutex**：
+> **何时使用哪一种 Mutex**：
 > - `std::sync::Mutex`：内部没有`.await`的短临界区
 > - `tokio::sync::Mutex`：当你需要跨`.await`点锁定时
 > （事务语义，TOCTOU 避免）
@@ -306,7 +306,7 @@ async fn process_requests(urls: Vec<String>) -> Vec<String> {
 ```
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 **发现错误：**
 
@@ -333,7 +333,7 @@ async fn process_requests(urls: Vec<String>) -> Vec<String> {
         .collect()
         .await;
 
-    // 修复 3：收集后解析 — 完全不需要互斥体
+    // 修复 3：先收集再解析，这样完全不需要 Mutex
     for result in &results {
         expensive_parse(result).await;
     }
@@ -342,7 +342,7 @@ async fn process_requests(urls: Vec<String>) -> Vec<String> {
 }
 ```
 
-**关键要点**：通常您可以重构异步代码以完全消除互斥体。使用streams/join收集结果，然后进行处理。更简单、更快、无死锁风险。
+**关键要点**：通常您可以重构异步代码以完全取消互斥体。使用streams/join收集结果，然后进行处理。更简单、更快、无死锁风险。
 
 </details>
 </details>
@@ -410,7 +410,7 @@ async fn handle_request(user_id: u64, db_pool: &Pool) -> Result<Response> {
 | 任务永远挂起 | 缺少 `.await` 或陷入僵局 `Mutex` | `tokio-console` 任务视图 |
 | 吞吐量低 | 阻塞异步线程上的调用 | `tokio-console` 轮询时间直方图 |
 | `Future is not Send` | 非Send型横跨`.await` | 编译错误+`#[instrument]`定位 |
-| 神秘取消 | 父级`select!`掉落了一根树枝 | `tracing` 跨越生命周期事件 |
+| 神秘取消 | 父级 `select!` 丢弃了一个分支 | `tracing` 跨越生命周期事件 |
 
 > **提示**：启用`RUSTFLAGS="--cfg tokio_unstable"`以获取任务级别指标
 > 在 tokio-控制台中。这是一个编译时标志，而不是Runtime标志。
@@ -464,7 +464,7 @@ use tokio::time::{self, Duration, Instant};
 
 #[tokio::test]
 async fn test_timeout_behavior() {
-    // 暂停时间 — sleep() 立即前进，没有真正的挂钟延迟
+    // 暂停虚拟时间后，sleep() 会被测试时钟推进，不需要真实等待
     time::pause();
 
     let start = Instant::now();
@@ -563,7 +563,7 @@ async fn cache_lookup<S: Storage>(store: &S, key: &str) -> String {
 async fn test_cache_miss_then_hit() {
     let mock = MockStorage::new();
 
-    // 第一次调用：miss→计算并存储
+    // 第一次调用：缓存 miss，计算并存储
     let val = cache_lookup(&mock, "key1").await;
     assert_eq!(val, "computed");
 

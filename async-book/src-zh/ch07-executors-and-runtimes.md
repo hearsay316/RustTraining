@@ -4,7 +4,7 @@
 > - 执行器的作用：轮询+高效睡眠
 > - 六大Runtime：mio、io_uring、tokio、async-std、smol、embassy
 > - 用于选择正确Runtime 之间的决策树
-> - 为什么与Runtime 无关的库设计很重要
+> - 为什么与 Runtime 无关的库设计很重要
 
 ## Executor 的作用是什么
 
@@ -14,21 +14,21 @@
 
 ```mermaid
 graph TB
-    subgraph Executor["Executor (e.g., tokio)"]
-        QUEUE["Task Queue"]
-        POLLER["I/O Poller<br/>(epoll/kqueue/io_uring)"]
-        THREADS["Worker Thread Pool"]
+    subgraph Executor["Executor（例如 tokio）"]
+        QUEUE["Task 队列"]
+        POLLER["I/O Poller<br/>（epoll/kqueue/io_uring）"]
+        THREADS["Worker 线程池"]
     end
 
     subgraph Tasks
-        T1["Task 1<br/>(HTTP request)"]
-        T2["Task 2<br/>(DB query)"]
-        T3["Task 3<br/>(File read)"]
+        T1["Task 1<br/>（HTTP 请求）"]
+        T2["Task 2<br/>（DB 查询）"]
+        T3["Task 3<br/>（读取文件）"]
     end
 
-    subgraph OS["Operating System"]
-        NET["Network Stack"]
-        DISK["Disk I/O"]
+    subgraph OS["操作系统"]
+        NET["网络栈"]
+        DISK["磁盘 I/O"]
     end
 
     T1 --> QUEUE
@@ -38,9 +38,9 @@ graph TB
     THREADS -->|"poll()"| T1
     THREADS -->|"poll()"| T2
     THREADS -->|"poll()"| T3
-    POLLER <-->|"register/notify"| NET
-    POLLER <-->|"register/notify"| DISK
-    POLLER -->|"wake tasks"| QUEUE
+    POLLER <-->|"注册/通知"| NET
+    POLLER <-->|"注册/通知"| DISK
+    POLLER -->|"唤醒 Task"| QUEUE
 
     style Executor fill:#e3f2fd,color:#000
     style OS fill:#f3e5f5,color:#000
@@ -93,25 +93,25 @@ Completion-based (io_uring):
 
 ```mermaid
 graph LR
-    subgraph "Readiness Model (epoll)"
-        A1["App: is it ready?"] --> K1["Kernel: yes"]
-        K1 --> A2["App: now read()"]
-        A2 --> K2["Kernel: here's data"]
+    subgraph "就绪模型（epoll）"
+        A1["应用：准备好了吗？"] --> K1["内核：好了"]
+        K1 --> A2["应用：现在 read()"]
+        A2 --> K2["内核：这是数据"]
     end
 
-    subgraph "Completion Model (io_uring)"
-        B1["App: read this for me"] --> K3["Kernel: working..."]
-        K3 --> B2["App: got result + data"]
+    subgraph "完成模型（io_uring）"
+        B1["应用：帮我读取这个"] --> K3["内核：处理中..."]
+        K3 --> B2["应用：拿到结果和数据"]
     end
 
     style B1 fill:#c8e6c9,color:#000
     style B2 fill:#c8e6c9,color:#000
 ```
 
-**所有权挑战**：io_uring要求内核拥有缓冲区，直到操作完成。这与借用缓冲区的Rust标准`AsyncRead`trait冲突。这就是为什么 `tokio-uring` 具有不同的 I/O 特征：
+**所有权挑战**：io_uring要求内核拥有缓冲区，直到操作完成。这与借用缓冲区的Rust标准`AsyncRead`trait冲突。这就是为什么 `tokio-uring` 具有不同的 I/O trait：
 
 ```rust
-// 标准 tokio（基于就绪）——借用缓冲区：
+// 标准 tokio（基于就绪）会借用缓冲区：
 let n = stream.read(&mut buf).await?;  // buf 被借用
 
 // tokio-uring（基于完成）— 取得缓冲区的所有权：
@@ -121,7 +121,7 @@ let n = result?;
 
 ```rust
 // Cargo.toml: tokio-uring = "0.5"
-// 注意：仅限 Linux，需要内核 5.1+
+// 注意：仅支持 Linux，且需要内核 5.1+
 
 fn main() {
     tokio_uring::start(async {
@@ -229,31 +229,31 @@ async fn main(spawner: embassy_executor::Spawner) {
 
 ```mermaid
 graph TD
-    START["Choosing a Runtime"]
+    START["选择 Runtime"]
 
-    Q1{"Building a<br/>network server?"}
-    Q2{"Need tokio ecosystem<br/>(Axum, Tonic, Hyper)?"}
-    Q3{"Building a library?"}
-    Q4{"Embedded /<br/>no_std?"}
-    Q5{"Want minimal<br/>dependencies?"}
+    Q1{"构建<br/>网络服务器？"}
+    Q2{"需要 tokio 生态<br/>（Axum、Tonic、Hyper）？"}
+    Q3{"构建库？"}
+    Q4{"嵌入式 /<br/>no_std？"}
+    Q5{"希望依赖<br/>最小化？"}
 
-    TOKIO["🟢 tokio<br/>Best ecosystem, most popular"]
-    SMOL["🔵 smol<br/>Minimal, no ecosystem lock-in"]
-    EMBASSY["🟠 embassy<br/>Embedded-first, no alloc"]
-    ASYNC_STD["🟣 async-std<br/>std-like API, good for learning"]
-    AGNOSTIC["🔵 runtime-agnostic<br/>Use futures crate only"]
+    TOKIO["🟢 tokio<br/>生态最好，最流行"]
+    SMOL["🔵 smol<br/>精简，无生态锁定"]
+    EMBASSY["🟠 embassy<br/>嵌入式优先，无 alloc"]
+    ASYNC_STD["🟣 async-std<br/>类似 std 的 API，适合学习"]
+    AGNOSTIC["🔵 Runtime 无关<br/>只使用 futures crate"]
 
     START --> Q1
-    Q1 -->|Yes| Q2
-    Q1 -->|No| Q3
-    Q2 -->|Yes| TOKIO
-    Q2 -->|No| Q5
-    Q3 -->|Yes| AGNOSTIC
-    Q3 -->|No| Q4
-    Q4 -->|Yes| EMBASSY
-    Q4 -->|No| Q5
-    Q5 -->|Yes| SMOL
-    Q5 -->|No| ASYNC_STD
+    Q1 -->|是| Q2
+    Q1 -->|否| Q3
+    Q2 -->|是| TOKIO
+    Q2 -->|否| Q5
+    Q3 -->|是| AGNOSTIC
+    Q3 -->|否| Q4
+    Q4 -->|是| EMBASSY
+    Q4 -->|否| Q5
+    Q5 -->|是| SMOL
+    Q5 -->|否| ASYNC_STD
 
     style TOKIO fill:#c8e6c9,color:#000
     style SMOL fill:#bbdefb,color:#000
@@ -264,7 +264,7 @@ graph TD
 
 ### Runtime 对照表
 
-| 特征 | tokio | async-std | smol | embassy |
+| trait | tokio | async-std | smol | embassy |
 |---------|-------|-----------|------|---------|
 | **生态系统** | 主导的 | 小的 | 最小 | 嵌入式 |
 | **多线程** | ✅ 偷工减料 | ✅ | ✅ | ❌（单核） |
@@ -276,7 +276,7 @@ graph TD
 | **二进制大小** | 大的 | 中等的 | 小的 | 微小的 |
 
 <details>
-<summary><strong>🏋️练习：Runtime比较</strong>（点击展开）</summary>
+<summary><strong>🏋️ 练习：Runtime 比较</strong>（点击展开）</summary>
 
 **挑战**：使用三个不同的Runtime（tokio、smol和async-std）编写相同的程序。该计划应该：
 1. 获取 URL（使用 sleep 进行模拟）
@@ -286,7 +286,7 @@ graph TD
 此练习演示了 async/await 代码是相同的 - 只是Runtime设置不同。
 
 <details>
-<summary>🔑解决方案</summary>
+<summary>🔑 参考答案</summary>
 
 ```rust
 // ----- tokio版本-----
@@ -342,7 +342,7 @@ async fn main() {
 }
 ```
 
-**关键要点**：异步业务逻辑在Runtime之间是相同的。仅入口点和计时器/IO API 不同。这就是为什么编写与Runtime 无关的库（仅使用`std::future::Future`）是有价值的。
+**关键要点**：异步业务逻辑在Runtime之间是相同的。仅入口点和计时器/IO API 不同。这就是为什么编写与 Runtime 无关的库（仅使用`std::future::Future`）是有价值的。
 
 </details>
 </details>
