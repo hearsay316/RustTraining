@@ -108,7 +108,7 @@ fn executor_loop(tasks: &mut TaskQueue) {
 即使 Future 的 I/O 尚未准备好，也可能会被轮询。这称为“虚假唤醒”。Future 必须正确处理这个问题：
 
 ```rust
-// 小白提示：这是“虚假唤醒安全”练习的答案。重点看 poll 每次都重新检查 flag，而不是被唤醒后就假设一定完成。
+// 小白提示：这段代码演示【虚假唤醒】。重点看 poll 每次都重新检查真实状态，而不是被唤醒后就假设数据已经准备好。
 impl Future for MyFuture {
     type Output = Data;
 
@@ -146,7 +146,7 @@ impl Future for MyFuture {
 <summary>🔑 参考答案</summary>
 
 ```rust
-// 小白提示：这段代码演示【虚假唤醒】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
+// 小白提示：这是“虚假唤醒安全”练习的答案。重点看 poll 每次都重新检查 flag，而不是被唤醒后就假设一定完成。
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};

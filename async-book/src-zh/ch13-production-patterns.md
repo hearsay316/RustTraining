@@ -96,8 +96,8 @@ sequenceDiagram
     WCH-->>W1: changed()
     WCH-->>W2: changed()
 
-    否te over W1: 完成当前请求
-    否te over W2: 完成当前请求
+    Note over W1: 完成当前请求
+    Note over W2: 完成当前请求
 
     W1-->>Main: Task 完成
     W2-->>Main: Task 完成

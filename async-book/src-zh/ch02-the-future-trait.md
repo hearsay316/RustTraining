@@ -36,26 +36,26 @@ sequenceDiagram
     participant R as Reactor (Runtime)
 
     E->>F: 调用 poll(cx)
-    否te right of F: Future 尝试执行操作
+    Note right of F: Future 尝试执行操作
     F->>OS: 系统调用（例如读取 TCP socket）
     OS-->>F: 返回错误：尚未 Ready
     
     F->>R: 注册 Waker
     F-->>E: 返回 Poll::Pending
-    否te left of E: Task 移出<br/>运行队列
+    Note left of E: Task 移出<br/>运行队列
 
     E->>E: (Executor 运行其他 Task 或休眠)
     R->>OS: epoll_wait() / 轮询 OS 事件
 
-    否te right of OS: (稍后) 新数据到达
+    Note right of OS: (稍后) 新数据到达
     OS-->>R: 唤醒 Reactor：数据已 Ready
     
     R->>R: Reactor 找到 Waker
     R->>E: 调用 Waker::wake()
-    否te right of E: Task 推回<br/>Executor 运行队列
+    Note right of E: Task 推回<br/>Executor 运行队列
 
     E->>F: 调用 poll(cx) again
-    否te right of F: Future 尝试执行操作 again
+    Note right of F: Future 尝试执行操作 again
     F->>OS: 系统调用（例如读取 TCP socket）
     OS-->>F: 成功：返回数据缓冲区
     F-->>E: 返回 Poll::Ready(Data)

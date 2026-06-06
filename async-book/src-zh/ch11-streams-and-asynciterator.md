@@ -147,7 +147,7 @@ async fn stream_examples() {
 | **错误处理** | `Stream<Item = Result<T, E>>` | 放入异步迭代器 |
 
 ```rust
-// 小白提示：这是异步统计聚合器的答案。重点看 fold 一边接收流里的值，一边更新累计状态，不需要先收集成 Vec。
+// 小白提示：这段代码演示【与 C# IAsyncEnumerable 的比较】。重点看 Rust 用 StreamExt::next().await 消费流，C# 用 await foreach。
 // Rust：数据库行的 Stream
 // 注意：使用 ? 时需要try_stream!（而不是stream!）体内。
 // stream! 不会传播错误 — try_stream! 产生 Err(e) 并结束。
@@ -197,7 +197,7 @@ await foreach (var user in GetUsers()) {
 <summary>🔑 参考答案</summary>
 
 ```rust
-// 小白提示：这段代码演示【与 C# IAsyncEnumerable 的比较】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
+// 小白提示：这是异步统计聚合器的答案。重点看 fold 一边接收流里的值，一边更新累计状态，不需要先收集成 Vec。
 use futures::stream::{self, StreamExt};
 
 #[derive(Debug)]
@@ -251,7 +251,7 @@ async fn test_stats() {
 正如 `std::io::Read`/`Write` 是同步 I/O 的基础一样，它们的异步对应项也是异步 I/O 的基础。这些 trait 由 `tokio::io` 提供（或 `futures::io` 对于与 Runtime 无关的代码）：
 
 ```rust
-// 小白提示：这是异步行计数器的答案。重点看泛型 R 只要求 AsyncBufRead + Unpin，因此文件、TCP、内存缓冲都能复用。
+// 小白提示：这段代码演示【异步 I/O trait：AsyncRead、AsyncWrite、AsyncBufRead】。重点看 poll_read/poll_write 都返回 Poll，表示“可能暂时没准备好”。
 // tokio::io：std::io trait 的异步版本
 
 /// 从源异步读取字节
@@ -285,7 +285,7 @@ pub trait AsyncBufRead: AsyncRead {
 **在实践中**，你很少直接调用这些 `poll_*` 方法。相反，请使用扩展 trait `AsyncReadExt` 和 `AsyncWriteExt`，它们提供 `.await` 友好的辅助方法：
 
 ```rust
-// 小白提示：这段代码演示【异步 I/O trait：AsyncRead、AsyncWrite、AsyncBufRead】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
+// 小白提示：这是异步行计数器的答案。重点看泛型 R 只要求 AsyncBufRead + Unpin，因此文件、TCP、内存缓冲都能复用。
 use tokio::io::{AsyncReadExt, AsyncWriteExt, AsyncBufReadExt};
 use tokio::net::TcpStream;
 use tokio::io::BufReader;
