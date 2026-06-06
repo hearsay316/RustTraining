@@ -14,6 +14,7 @@
 <summary>🔑 参考答案</summary>
 
 ```rust
+// 小白提示：这段代码演示【练习 1：异步 Echo 服务器】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 
@@ -68,6 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 <summary>🔑 参考答案</summary>
 
 ```rust
+// 小白提示：这段代码演示【练习 2：具有速率限制的并发 URL 提取器】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use futures::stream::{self, StreamExt};
 use tokio::time::{sleep, Duration};
 
@@ -115,6 +117,7 @@ async fn fetch_urls(urls: Vec<String>) -> Vec<Result<String, String>> {
 <summary>🔑 参考答案</summary>
 
 ```rust
+// 小白提示：这段代码演示【练习 3：使用工作池正常关闭】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::sync::{mpsc, watch};
 use tokio::time::{sleep, Duration};
 
@@ -202,6 +205,7 @@ async fn main() {
 <summary>🔑 参考答案</summary>
 
 ```rust
+// 小白提示：这段代码演示【练习 4：从头开始构建一个简单的异步 Mutex】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::cell::UnsafeCell;
 use std::sync::Arc;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
@@ -289,6 +293,7 @@ impl<T> std::ops::DerefMut for SimpleGuard<T> {
 <summary>🔑 参考答案</summary>
 
 ```rust
+// 小白提示：这段代码演示【练习 5：Stream 管道】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use futures::stream::{self, StreamExt};
 use tokio::time::{sleep, Duration};
 
@@ -329,6 +334,7 @@ async fn main() {
 <summary>🔑 参考答案</summary>
 
 ```rust,ignore
+// 小白提示：这段代码演示【练习 6：实现带有超时的 Select】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};

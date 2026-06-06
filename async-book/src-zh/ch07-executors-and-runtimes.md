@@ -51,6 +51,7 @@ graph TB
 [澪](https://github.com/tokio-rs/mio)（Metal I/O）不是执行器——它是最低级别的跨平台 I/O 通知库。它包装了 `epoll` (Linux)、`kqueue` (macOS/BSD) 和 IOCP (Windows)。
 
 ```rust
+// 小白提示：这段代码演示【mio：基础层】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // mio 概念用法（简化）：
 use mio::{Events, Interest, Poll, Token};
 use mio::net::TcpListener;
@@ -111,6 +112,7 @@ graph LR
 **所有权挑战**：io_uring要求内核拥有缓冲区，直到操作完成。这与借用缓冲区的Rust标准`AsyncRead`trait冲突。这就是为什么 `tokio-uring` 具有不同的 I/O trait：
 
 ```rust
+// 小白提示：这段代码演示【io_uring：基于完成的Future】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 标准 tokio（基于就绪）会借用缓冲区：
 let n = stream.read(&mut buf).await?;  // buf 被借用
 
@@ -120,6 +122,7 @@ let n = result?;
 ```
 
 ```rust
+// 小白提示：这段代码演示【io_uring：基于完成的Future】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // Cargo.toml: tokio-uring = "0.5"
 // 注意：仅支持 Linux，且需要内核 5.1+
 
@@ -150,6 +153,7 @@ fn main() {
 Rust 生态系统中占主导地位的异步Runtime。由 Axum、Hyper、Tonic 和大多数生产 Rust 服务器使用。
 
 ```rust
+// 小白提示：这段代码演示【tokio：包含电池 Runtime】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // Cargo.toml：
 // [依赖项]
 // tokio = { version = "1", features = ["full"] }
@@ -174,6 +178,7 @@ async fn main() {
 使用异步版本镜像 `std` API。不如tokio受欢迎，但对于初学者来说更简单。
 
 ```rust
+// 小白提示：这段代码演示【async-std：标准库镜像】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // Cargo.toml：
 // [依赖项]
 // async-std = { version = "1", features = ["attributes"] }
@@ -191,6 +196,7 @@ async fn main() {
 小型、零依赖异步Runtime。非常适合需要异步而不引入 tokio 的库。
 
 ```rust
+// 小白提示：这段代码演示【smol：极简主义Runtime】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // Cargo.toml：
 // [依赖项]
 // smol = "2"
@@ -211,6 +217,7 @@ fn main() {
 嵌入式系统的异步Runtime。没有堆分配，不需要`std`。
 
 ```rust
+// 小白提示：这段代码演示【embassy：嵌入式异步 (no_std)】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 在微控制器（例如 STM32、nRF52、RP2040）上运行
 #[embassy_executor::main]
 async fn main(spawner: embassy_executor::Spawner) {
@@ -289,6 +296,7 @@ graph TD
 <summary>🔑 参考答案</summary>
 
 ```rust
+// 小白提示：这段代码演示【Runtime 对照表】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // ----- tokio版本-----
 // Cargo.toml: tokio = { version = "1", features = ["full"] }
 #[tokio::main]

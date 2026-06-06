@@ -11,6 +11,7 @@
 Tokio提供两种Runtime 配置：
 
 ```rust
+// 小白提示：这段代码演示【Runtime 风格：多线程与当前线程】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 多线程（默认为#[tokio::main]）
 // 使用工作窃取线程池——任务可以在线程之间移动
 #[tokio::main]
@@ -65,6 +66,7 @@ graph TB
 `tokio::spawn` 将 future 放入Runtime的任务队列中。因为它可能在*任何*时间在*任何*工作线程上运行，所以Future一定是`Send + 'static`：
 
 ```rust
+// 小白提示：这段代码演示【tokio::spawn 和“静态要求”】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::task;
 
 async fn example() {
@@ -101,6 +103,7 @@ async fn problem() {
 **为什么`Send`？** 任务可能会在与挂起的线程不同的线程上恢复。跨 `.await` 点保存的所有数据必须能够安全地在线程之间发送。
 
 ```rust
+// 小白提示：这段代码演示【tokio::spawn 和“静态要求”】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 常见模式：将共享数据克隆到任务中
 let shared = Arc::new(config);
 
@@ -115,6 +118,7 @@ for i in 0..10 {
 ### JoinHandle 和任务取消
 
 ```rust
+// 小白提示：这段代码演示【JoinHandle 和任务取消】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 
@@ -149,6 +153,7 @@ async fn cancellation_example() {
 Tokio 提供异步感知的同步原语。关键原则：**不要在 `.await` 点上使用 `std::sync::Mutex`**。
 
 ```rust
+// 小白提示：这段代码演示【Tokio Sync 原语】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::sync::{Mutex, RwLock, Semaphore, mpsc, oneshot, broadcast, watch};
 
 // --- Mutex ---
@@ -261,6 +266,7 @@ graph LR
 <summary>🔑 参考答案</summary>
 
 ```rust
+// 小白提示：这是任务池练习的答案。重点看 channel 负责派发工作，worker 负责并发处理，JoinSet 负责等待任务结束。
 use std::future::Future;
 use std::sync::Arc;
 use tokio::sync::Semaphore;

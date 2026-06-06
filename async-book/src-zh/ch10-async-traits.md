@@ -31,6 +31,7 @@ graph TD
 多年来，trait 中的异步方法是 Rust 最受欢迎的功能。问题：
 
 ```rust
+// 小白提示：这段代码演示【历史：为什么花了这么长时间】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 这类写法直到 Rust 1.75（2023 年 12 月）才稳定可用：
 trait DataStore {
     async fn get(&self, key: &str) -> Option<String>;
@@ -46,6 +47,7 @@ trait DataStore {
 从 Rust 1.75 开始，这仅适用于静态调度：
 
 ```rust
+// 小白提示：这段代码演示【RPITIT：返回位置 Impl Trait in Trait】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 trait DataStore {
     async fn get(&self, key: &str) -> Option<String>;
     // 脱糖至：
@@ -75,6 +77,7 @@ async fn lookup<S: DataStore>(store: &S, key: &str) {
 限制：你不能直接使用 `dyn DataStore` 因为编译器不知道返回的 future 的大小：
 
 ```rust
+// 小白提示：这段代码演示【dyn 调度和 Send 边界】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // ❌ 不起作用：
 // async fn lookup_dyn(store: &dyn DataStore, key: &str) { ... }
 // Error: the trait `DataStore` is not dyn-compatible because method `get`
@@ -89,6 +92,7 @@ trait DynDataStore {
 **Send问题**：在多线程 Runtime，生成的任务必须是`Send`。但异步 trait 方法不会自动添加 `Send` 边界：
 
 ```rust
+// 小白提示：这段代码演示【dyn 调度和 Send 边界】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 trait Worker {
     async fn run(self); // Future 可能是 Send，也可能不是 Send
 }
@@ -117,6 +121,7 @@ impl Worker for MyWorker {
 `trait_variant` crate（来自Rust异步工作组）自动生成`Send`变体：
 
 ```rust
+// 小白提示：这段代码演示【trait_variant 箱子】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // Cargo.toml: trait-variant = "0.1"
 
 #[trait_variant::make(SendDataStore: Send)]
@@ -163,6 +168,7 @@ async fn spawn_lookup<S: SendDataStore + 'static>(store: Arc<S>) {
 从 Rust 1.85 开始，`async closures` 是稳定的——捕获其环境并返回 future 的闭包：
 
 ```rust
+// 小白提示：这是异步服务 trait 的参考答案。重点看 trait 方法可以是 async，但对象安全和 Send 边界需要额外设计。
 // 1.85 之前：尴尬的解决方法
 let urls = vec!["https://a.com", "https://b.com"];
 let fetchers: Vec<_> = urls.iter().map(|url| {
@@ -181,6 +187,7 @@ let fetchers: Vec<_> = urls.iter().map(|url| {
 异步闭包实现了新的 `AsyncFn`、`AsyncFnMut` 和 `AsyncFnOnce` trait，它们镜像 `Fn`、`FnMut`、`FnOnce`：
 
 ```rust
+// 小白提示：这段代码演示【异步闭包 (Rust 1.85+)】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 接受 async 闭包的通用函数
 async fn retry<F>(max: usize, f: F) -> Result<String, Error>
 where
@@ -207,6 +214,7 @@ where
 <summary>🔑 参考答案</summary>
 
 ```rust
+// 小白提示：这段代码演示【异步闭包 (Rust 1.85+)】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;

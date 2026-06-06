@@ -13,6 +13,7 @@
 生产服务器必须彻底关闭——完成正在进行的请求、刷新缓冲区、关闭连接：
 
 ```rust
+// 小白提示：这段代码演示【优雅关机】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::signal;
 use tokio::sync::watch;
 
@@ -108,6 +109,7 @@ sequenceDiagram
 如果生产者比消费者更快，无界通道可能会导致 OOM。在生产中始终使用有界通道：
 
 ```rust
+// 小白提示：这段代码演示【有界通道的背压】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::sync::mpsc;
 
 async fn backpressure_example() {
@@ -143,6 +145,7 @@ async fn backpressure_example() {
 `JoinSet` 对相关任务进行分组并确保它们全部完成：
 
 ```rust
+// 小白提示：这段代码演示【结构化并发：JoinSet 和 TaskTracker】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::task::JoinSet;
 use tokio::time::{sleep, Duration};
 
@@ -192,6 +195,7 @@ async fn with_tracker() {
 ### 超时和重试
 
 ```rust
+// 小白提示：这段代码演示【超时和重试】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::time::{timeout, sleep, Duration};
 
 // 简单的超时
@@ -251,6 +255,7 @@ where
 **`thiserror` 与 `anyhow`** — 选择正确的工具：
 
 ```rust
+// 小白提示：这段代码演示【异步代码中的错误处理】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // thiserror：适合为库和公开 API 定义类型化错误
 // 每个变体都是明确的——调用者可以匹配特定的错误
 use thiserror::Error;
@@ -297,6 +302,7 @@ async fn run_diagnostics() -> Result<()> {
 **双`?`模式**与`tokio::spawn`：
 
 ```rust
+// 小白提示：这段代码演示【异步代码中的错误处理】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use thiserror::Error;
 use tokio::task::JoinError;
 
@@ -324,6 +330,7 @@ async fn spawn_with_errors() -> Result<String, AppError> {
 **错误边界问题** — `tokio::spawn` 删除上下文：
 
 ```rust
+// 小白提示：这段代码演示【异步代码中的错误处理】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // ❌ 错误上下文在 spawn 边界处丢失：
 async fn bad_error_handling() -> Result<()> {
     let handle = tokio::spawn(async {
@@ -353,6 +360,7 @@ async fn good_error_handling() -> Result<()> {
 **超时错误** — 包装与替换：
 
 ```rust
+// 小白提示：这段代码演示【异步代码中的错误处理】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::time::{timeout, Duration};
 
 async fn with_timeout_context() -> Result<String, DiagError> {
@@ -370,6 +378,7 @@ async fn with_timeout_context() -> Result<String, DiagError> {
 [Tower](https://docs.rs/tower) crate 定义了一个可组合的 `Service` trait — Rust 中异步中间件的主干（由 `axum`、`tonic`、`hyper` 使用）：
 
 ```rust
+// 小白提示：这段代码演示【Tower：中间件模式】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // Tower 的核心 trait（简化）：
 pub trait Service<Request> {
     type Response;
@@ -384,6 +393,7 @@ pub trait Service<Request> {
 中间件包装了 `Service` 以添加横切行为 - 日志记录、超时、速率限制 - 而不修改内部逻辑：
 
 ```rust
+// 小白提示：这段代码演示【Tower：中间件模式】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tower::{ServiceBuilder, timeout::TimeoutLayer, limit::RateLimitLayer};
 use std::time::Duration;
 
@@ -406,6 +416,7 @@ let service = ServiceBuilder::new()
 <summary>🔑 参考答案</summary>
 
 ```rust
+// 小白提示：这段代码演示【练习：使用工作池正常关闭】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::sync::{mpsc, watch};
 use tokio::time::{sleep, Duration};
 

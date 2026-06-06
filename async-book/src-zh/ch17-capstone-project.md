@@ -47,6 +47,7 @@ graph LR
 从接受连接并回显线路的服务器开始：
 
 ```rust
+// 小白提示：这段代码演示【第 1 步：基本 TCP 接受循环】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 
@@ -86,6 +87,7 @@ async fn main() -> anyhow::Result<()> {
 每个房间都是`broadcast::Sender`。房间中的所有客户端都订阅接收消息。
 
 ```rust
+// 小白提示：这段代码演示【步骤 2：带有广播频道的房间状态】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
@@ -117,6 +119,7 @@ fn get_or_create_room(rooms: &mut HashMap<String, broadcast::Sender<String>>, na
 使用 `tokio::select!` 运行两者：
 
 ```rust
+// 小白提示：这段代码演示【步骤 2：带有广播频道的房间状态】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 loop {
     tokio::select! {
         // 客户端发来一行
@@ -166,6 +169,7 @@ loop {
 4. 干净地退出
 
 ```rust
+// 小白提示：这段代码演示【第 4 步：正常关机】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::sync::watch;
 
 let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -198,6 +202,7 @@ loop {
 4. **超时**：断开空闲时间超过 5 分钟的客户端。
 
 ```rust
+// 小白提示：这段代码演示【第 5 步：错误处理和边缘情况】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::time::{timeout, Duration};
 
 // 给读取操作包一层超时：
@@ -212,6 +217,7 @@ match timeout(Duration::from_secs(300), reader.read_line(&mut line)).await {
 编写一个启动服务器、连接两个客户端并验证消息传递的测试：
 
 ```rust
+// 小白提示：这段代码演示【第6步：集成测试】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 #[tokio::test]
 async fn two_clients_can_chat() {
     // 在后台启动服务器

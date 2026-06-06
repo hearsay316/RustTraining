@@ -15,6 +15,7 @@
 当编译器将 `async fn` 转换为状态机时，该状态机可能包含对其自身字段的引用。这会创建一个“自引用结构”——将其移动到内存中将使这些内部引用无效。
 
 ```rust
+// 小白提示：这段代码演示【问题：自指结构】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 编译器生成（简化）的目的：
 // async fn example() {
 //     let data = vec![1, 2, 3];
@@ -61,6 +62,7 @@ graph LR
 这不是一个学术问题。每个持有跨 `.await` 点引用的 `async fn` 都会创建一个自引用状态机：
 
 ```rust
+// 小白提示：这段代码演示【自指结构】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 async fn problematic() {
     let data = String::from("hello");
     let slice = &data[..]; // 切片借用数据
@@ -78,6 +80,7 @@ async fn problematic() {
 `Pin<P>` 是一个包装器，可防止将值移动到指针后面：
 
 ```rust
+// 小白提示：这段代码演示【Pin 实践】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::pin::Pin;
 
 let mut data = String::from("hello");
@@ -97,6 +100,7 @@ println!("{}", pinned.as_ref().get_ref()); // “你好”
 在实际代码中，您主要在三个地方遇到 Pin：
 
 ```rust
+// 小白提示：这段代码演示【Pin 实践】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 1. poll()签名——所有Future 均通过Pin轮询
 fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Output>;
 
@@ -113,6 +117,7 @@ tokio::pin!(my_future);
 Rust 中的大多数类型都是 `Unpin` — 它们不包含自引用，因此固定是无操作的。只有编译器生成的状态机（来自`async fn`）是`!Unpin`。
 
 ```rust
+// 小白提示：这段代码演示【Unpin 逃生舱口】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 这些都是Unpin——固定它们没有什么特别的：
 // 这些普通类型都是 Unpin：i32、String、Vec<T>、HashMap<K,V>、Box<T>、&T、&mut T
 
@@ -140,6 +145,7 @@ impl Unpin for MySimpleFuture {} // “我可以安全移动，相信我”
 **挑战**：以下哪些代码片段可以编译？对于每一个不符合要求的问题，请解释原因并予以解决。
 
 ```rust
+// 小白提示：这三个片段都在测试“移动的是 Future 本体，还是只移动指向 Future 的指针包装器”。
 // 片段 A
 let fut = async { 42 };
 let pinned = Box::pin(fut);
@@ -165,6 +171,7 @@ let pinned = Pin::new(&mut fut);
 
 **代码片段 B**： ✅ **编译。** `tokio::pin!` 将Future固定到栈并将 `fut` 重新绑定为 `Pin<&mut ...>`。 `let moved = fut` 移动 **`Pin` 包装器**（指针），而不是底层的 future - future 保持固定在栈上。这就像`Box::pin`：移动`Box`不会移动堆分配。然而，`fut`会被移动消耗，所以之后你不能使用`fut`——只能使用`moved`：
 ```rust
+// 小白提示：这里移动的是 Pin<&mut ...> 这个包装器，不是底层的 async 块，所以底层 Future 仍然固定在原地。
 let fut = async { 42 };
 tokio::pin!(fut);
 let moved = fut;        // 移动 Pin<&mut> 这个指针包装器是允许的
@@ -174,6 +181,7 @@ let result = moved.await; // ✅ 使用移动代替
 
 **代码片段 C**：❌ **无法编译。** `Pin::new()` 需要 `T: Unpin`。异步块生成 `!Unpin` 类型。 **修复**：使用`Box::pin()`或`unsafe Pin::new_unchecked()`：
 ```rust
+// 小白提示：Box::pin 会把 Future 放到堆上；之后移动 Box 只移动指针，不移动 Future 本体。
 let fut = async { 42 };
 let pinned = Box::pin(fut); // 堆销 — 与 !Unpin 一起使用
 ```

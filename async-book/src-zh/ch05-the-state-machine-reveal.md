@@ -13,6 +13,7 @@
 ### 并排：async fn 与状态机
 
 ```rust
+// 小白提示：这段代码演示【并排：async fn 与状态机】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 你写的：
 async fn fetch_two_pages() -> String {
     let page1 = http_get("https://example.com/a").await;
@@ -24,6 +25,7 @@ async fn fetch_two_pages() -> String {
 编译器在概念上生成如下内容：
 
 ```rust
+// 小白提示：这段代码演示【并排：async fn 与状态机】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 enum FetchTwoPagesStateMachine {
     // 状态0：即将调用page1的http_get
     Start,
@@ -104,6 +106,7 @@ stateDiagram-v2
 **大小**：枚举的大小是其所有变体中的最大值。每个 `.await` 点都会创建一个新变体。这意味着：
 
 ```rust
+// 小白提示：这段代码演示【为什么这对性能很重要】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 async fn small() {
     let a: u8 = 0;
     yield_now().await;
@@ -137,6 +140,7 @@ async fn big() {
 **挑战**：给定这个异步函数，画出编译器生成的状态机。它有多少个状态（枚举变体）？每个中存储什么值？
 
 ```rust
+// 小白提示：这段代码演示【练习：预测状态机】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 async fn pipeline(url: &str) -> Result<usize, Error> {
     let response = fetch(url).await?;
     let body = response.text().await?;

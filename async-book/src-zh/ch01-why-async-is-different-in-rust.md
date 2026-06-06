@@ -47,6 +47,7 @@ graph LR
 ### 没有内置 Runtime
 
 ```rust
+// 小白提示：这段代码演示【没有内置 Runtime】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 这段代码可以编译，但它不会真正执行 fetch_data 的函数体。
 // async fn 调用后返回的是一个 Future，而不是函数的最终结果。
 async fn fetch_data() -> String {
@@ -68,6 +69,7 @@ fn main() {
 对比 C#，`Task` 通常是急切启动的：
 
 ```csharp
+// 小白提示：这是 C# 对照示例，用来和 Rust 的 async 写法比较；先理解调用后得到 Task，再理解 await 取结果。
 // C# 中调用 async 方法通常会立即启动执行，返回的 Task 表示正在进行的工作。
 async Task<string> FetchData() => "hello";
 
@@ -88,6 +90,7 @@ var result = await task;    // await 只是等待它完成并取出结果
 | **取消** | 通常依赖 `CancellationToken` 等协作机制 | `Task.cancel()` 协作取消并抛出 `CancelledError` | 通常通过 `context.Context` 协作取消 | 丢弃 Future 即立即停止继续 poll |
 
 ```rust
+// 小白提示：这段代码演示【Lazy Future 与 Eager Task】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 要真正运行 Future，必须把它交给 Executor。
 // #[tokio::main] 会生成一个 tokio Runtime，并在其中运行 async main。
 #[tokio::main]

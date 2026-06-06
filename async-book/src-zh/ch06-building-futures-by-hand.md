@@ -13,6 +13,7 @@
 ### TimerFuture：一个完整​​的例子
 
 ```rust
+// 小白提示：这段代码演示【TimerFuture：一个完整​​的例子】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -85,6 +86,7 @@ impl Future for TimerFuture {
 `Join` 轮询两个 future，并在 * 两个 * 完成时完成。这就是 `tokio::join!` 的内部工作原理：
 
 ```rust
+// 小白提示：这段代码演示【Join：同时运行两个 future】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -204,6 +206,7 @@ graph LR
 当 *任一* future 首先完成时 `Select` 完成（另一个被丢弃）：
 
 ```rust
+// 小白提示：这是 RetryFuture 的参考答案。重点看 current 保存“当前正在跑的 Future”，remaining 控制还能重试几次。
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -272,6 +275,7 @@ where
 <summary>🔑 参考答案</summary>
 
 ```rust
+// 小白提示：这段代码演示【Select：赛跑两个Future】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};

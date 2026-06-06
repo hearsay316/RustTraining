@@ -11,6 +11,7 @@
 异步 Rust 中的所有内容最终都实现了这个trait：
 
 ```rust
+// 小白提示：这段代码演示【Future 的解剖】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 pub trait Future {
     type Output;
 
@@ -63,6 +64,7 @@ sequenceDiagram
 让我们分解每一部分：
 
 ```rust
+// 小白提示：这段代码演示【输出，poll()，Context，Waker】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -90,6 +92,7 @@ impl Future for Ready42 {
 `Waker`是回调机制。当 future 返回 `Pending` 时，它 *必须* 安排稍后调用 `waker.wake()` - 否则执行器将永远不会再次轮询它并且程序会挂起。
 
 ```rust
+// 小白提示：这段代码演示【Waker合约】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::task::{Context, Poll, Waker};
 use std::pin::Pin;
 use std::future::Future;
@@ -173,6 +176,7 @@ impl Future for Delay {
 <summary>🔑 参考答案</summary>
 
 ```rust
+// 小白提示：这段代码演示【练习：实现 CountdownFuture】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};

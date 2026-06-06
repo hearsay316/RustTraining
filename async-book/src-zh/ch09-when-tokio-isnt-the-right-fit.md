@@ -31,6 +31,7 @@ graph TD
 Tokio的`spawn`需要`'static`Future。这意味着您无法在生成的任务中借用本地数据：
 
 ```rust
+// 小白提示：这段代码演示【“静态Future”问题】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 async fn process_items(items: &[String]) {
     // ❌ 不能这样做 — 物品是借来的，不是 'static
     // for item in items {
@@ -66,6 +67,7 @@ async fn process_items(items: &[String]) {
 *不同*约束：
 
 ```rust
+// 小白提示：这段代码演示【`tokio::spawn` 的替代品】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 1. FuturesUnordered — 完全避免'static（不需要 spawn！）
 use futures::stream::{FuturesUnordered, StreamExt};
 
@@ -134,6 +136,7 @@ async fn with_joinset() {
 如果您正在编写一个库 - 不要强迫用户进入 tokio：
 
 ```rust
+// 小白提示：这是 FuturesUnordered vs spawn 的对比答案。重点看 FuturesUnordered 不要求 'static，spawn 的任务可能在线程间移动。
 // ❌ 不好：图书馆将 tokio 强加给用户
 pub async fn my_lib_function() {
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -181,6 +184,7 @@ where
 <summary>🔑 参考答案</summary>
 
 ```rust
+// 小白提示：这段代码演示【库的轻量级Runtime】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use futures::stream::{FuturesUnordered, StreamExt};
 use tokio::time::{sleep, Duration};
 

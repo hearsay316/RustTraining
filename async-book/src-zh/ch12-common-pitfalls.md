@@ -12,6 +12,7 @@
 异步 Rust 中的#1错误：在异步执行器线程上运行阻塞代码。这会导致其他任务挨饿。
 
 ```rust
+// 小白提示：这段代码演示【封锁Executor】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // ❌错误：阻塞整个执行器线程
 async fn bad_handler() -> String {
     let data = std::fs::read_to_string("big_file.txt").unwrap(); // 会阻塞！
@@ -55,6 +56,7 @@ graph TB
 ### std::thread::sleep 与 tokio::time::sleep
 
 ```rust
+// 小白提示：这段代码演示【std::thread::sleep 与 tokio::time::sleep】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // ❌错误：阻塞执行器线程 5 秒
 async fn bad_delay() {
     std::thread::sleep(Duration::from_secs(5)); // 线程无法轮询任何其他内容！
@@ -69,6 +71,7 @@ async fn good_delay() {
 ### 按住MutexGuard穿过.await
 
 ```rust
+// 小白提示：这段代码演示【按住MutexGuard穿过.await】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::sync::Mutex; // std Mutex 不感知 async，可能阻塞 Executor 线程
 
 // ⚠️ 有风险：MutexGuard 横跨.await
@@ -98,6 +101,7 @@ I/O 的持续时间，防止执行器轮询该 I/O 上的其他任务
 关键部分。正确的修复取决于用例：
 
 ```rust
+// 小白提示：这段代码演示【按住MutexGuard穿过.await】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 选项 1：范围保护——在操作独立时起作用
 async fn scoped_mutex(data: &Mutex<Vec<String>>) {
     {
@@ -144,6 +148,7 @@ async fn async_mutex(data: &AsyncMutex<Vec<String>>) {
 放弃 future 会取消它——但这可能会让事情处于不一致的状态：
 
 ```rust
+// 小白提示：这段代码演示【取消风险】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // ❌危险：取消时资源泄漏
 async fn transfer(from: &Account, to: &Account, amount: u64) {
     from.debit(amount).await;  // 如果在这里取消...
@@ -177,6 +182,7 @@ tokio::select! {
 Rust 的 `Drop` trait 是同步的 — 你**不能** `.await` 位于 `drop()` 内。这是一个常见的混乱来源：
 
 ```rust
+// 小白提示：这段代码演示【无异步丢弃】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 struct DbConnection { /* ... */ }
 
 impl Drop for DbConnection {
@@ -201,6 +207,7 @@ impl Drop for DbConnection {
 ### select！公平与饥饿
 
 ```rust
+// 小白提示：这段代码演示【select！公平与饥饿】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::sync::mpsc;
 
 // ❌ 不公平：busy_stream 总是获胜，slow_stream 挨饿
@@ -231,6 +238,7 @@ async fn fair(mut fast: mpsc::Receiver<i32>, mut slow: mpsc::Receiver<i32>) {
 ### 意外顺序执行
 
 ```rust
+// 小白提示：这段代码演示【意外顺序执行】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // ❌ 顺序：总共需要 2 秒
 async fn slow() {
     let a = fetch("url_a").await; // 1秒
@@ -288,6 +296,7 @@ async fn also_fast() {
 **挑战**：找到此代码中的所有异步陷阱并修复它们。
 
 ```rust
+// 小白提示：这是“发现错误”练习的原始问题代码。先找顺序 await、阻塞 sleep、锁跨 await 这些典型陷阱。
 use std::sync::Mutex;
 
 async fn process_requests(urls: Vec<String>) -> Vec<String> {
@@ -316,6 +325,7 @@ async fn process_requests(urls: Vec<String>) -> Vec<String> {
 4. **无并发** — 应使用 `join!` 或 `FuturesUnordered`
 
 ```rust
+// 小白提示：这是修复后的版本。重点看 buffer_unordered 提供并发，tokio::time::sleep 不阻塞执行器，而且完全去掉了 Mutex。
 use tokio::sync::Mutex;
 use std::sync::Arc;
 use futures::stream::{self, StreamExt};
@@ -358,6 +368,7 @@ async fn process_requests(urls: Vec<String>) -> Vec<String> {
 [tokio-控制台](https://github.com/tokio-rs/console) 为您提供每个衍生任务的类似于 `htop` 的视图：其状态、轮询持续时间、Waker活动和资源使用情况。
 
 ```toml
+# 小白提示：这是 Cargo.toml 配置，告诉 Rust 项目要引入哪些依赖，以及启用哪些 feature。
 # Cargo.toml
 [dependencies]
 console-subscriber = "0.4"
@@ -365,6 +376,7 @@ tokio = { version = "1", features = ["full", "tracing"] }
 ```
 
 ```rust
+// 小白提示：这段代码演示【tokio-console：实时任务检查器】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 #[tokio::main]
 async fn main() {
     console_subscriber::init(); // 替换默认的跟踪订阅者
@@ -375,6 +387,7 @@ async fn main() {
 然后在另一个终端中：
 
 ```bash
+# 小白提示：这是终端命令，$ 后面的内容是要输入的命令本身。
 $ RUSTFLAGS="--cfg tokio_unstable" cargo run   # Required compile-time flag
 $ tokio-console                                # Connects to 127.0.0.1:6669
 ```
@@ -384,6 +397,7 @@ $ tokio-console                                # Connects to 127.0.0.1:6669
 [`tracing`](https://docs.rs/tracing) 板条箱了解 `Future` 生命周期。 Span 在 `.await` 点上保持打开状态，即使操作系统线程已继续运行，也可以为您提供逻辑调用栈：
 
 ```rust
+// 小白提示：这段代码演示【跟踪 + #[instrument]：异步结构化日志记录】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tracing::{info, instrument};
 
 #[instrument(skip(db_pool), fields(user_id = %user_id))]
@@ -422,6 +436,7 @@ async fn handle_request(user_id: u64, db_pool: &Pool) -> Result<Response> {
 **基本异步测试**与 `#[tokio::test]`：
 
 ```rust
+// 小白提示：这段代码演示【测试异步代码】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // Cargo.toml
 // [开发依赖项]
 // tokio = { version = "1", features = ["full", "test-util"] }
@@ -460,6 +475,7 @@ async fn test_concurrent_behavior() {
 **时间操纵** - 测试超时而不实际等待：
 
 ```rust
+// 小白提示：这段代码演示【测试异步代码】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use tokio::time::{self, Duration, Instant};
 
 #[tokio::test]
@@ -509,6 +525,7 @@ async fn test_deadline_exceeded() {
 **模拟异步依赖** — 使用 trait 对象或泛型：
 
 ```rust
+// 小白提示：这段代码演示【测试异步代码】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 定义依赖关系的trait：
 trait Storage {
     async fn get(&self, key: &str) -> Option<String>;
@@ -577,6 +594,7 @@ async fn test_cache_miss_then_hit() {
 **测试通道和任务通信**：
 
 ```rust
+// 小白提示：这段代码演示【测试异步代码】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 #[tokio::test]
 async fn test_producer_consumer() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(10);

@@ -28,6 +28,7 @@ stateDiagram-v2
 为了揭开执行器的神秘面纱，让我们构建一个最简单的执行器：
 
 ```rust
+// 小白提示：这段代码演示【最小Executor】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::future::Future;
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 use std::pin::Pin;
@@ -83,6 +84,7 @@ fn main() {
 真正的执行器是事件驱动的。当所有的 future 都是 `Pending` 时，执行器就睡觉。Waker是一种中断机制：
 
 ```rust
+// 小白提示：这段代码演示【唤醒通知】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 真实执行器主循环的概念模型：
 fn executor_loop(tasks: &mut TaskQueue) {
     loop {
@@ -106,6 +108,7 @@ fn executor_loop(tasks: &mut TaskQueue) {
 即使 Future 的 I/O 尚未准备好，也可能会被轮询。这称为“虚假唤醒”。Future 必须正确处理这个问题：
 
 ```rust
+// 小白提示：这是“虚假唤醒安全”练习的答案。重点看 poll 每次都重新检查 flag，而不是被唤醒后就假设一定完成。
 impl Future for MyFuture {
     type Output = Data;
 
@@ -143,6 +146,7 @@ impl Future for MyFuture {
 <summary>🔑 参考答案</summary>
 
 ```rust
+// 小白提示：这段代码演示【虚假唤醒】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -214,6 +218,7 @@ fn set_flag(flag: &AtomicBool, waker_slot: &Mutex<Option<Waker>>) {
 标准库和tokio 中的两个实用程序可以避免编写完整的`Future`实现：
 
 ```rust
+// 小白提示：这段代码演示【方便的实用程序：`poll_fn`和`yield_now`】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 use std::future::poll_fn;
 use std::task::Poll;
 
@@ -230,6 +235,7 @@ async fn read_when_ready(source: &MySource) -> Data {
 ```
 
 ```rust
+// 小白提示：这段代码演示【方便的实用程序：`poll_fn`和`yield_now`】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // yield_now：主动把控制权交还给执行器
 // 在CPU重的async循环中很有用，以避免其他任务挨饿
 async fn cpu_heavy_work(items: &[Item]) {

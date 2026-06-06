@@ -46,6 +46,7 @@ Bob Nystrom 的 [“你的职能是什么颜色？”](https://journal.stuffwith
 ### 版本 A：通过核心异步
 
 ```rust
+// 小白提示：这段代码演示【版本 A：通过核心异步】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // order.rs — async 一路向下
 
 pub async fn process_order(order: Order) -> Result<Receipt, OrderError> {
@@ -78,6 +79,7 @@ pub async fn process_order(order: Order) -> Result<Receipt, OrderError> {
 另一种选择：将“决定什么”与“如何获取”分开：
 
 ```rust
+// 小白提示：这段代码演示【版本 B：Sync 核心，异步 Shell】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // core.rs — 纯业务逻辑，零 async，零 tokio 依赖
 
 pub fn validate_order(order: &Order) -> Result<ValidatedOrder, OrderError> {
@@ -107,6 +109,7 @@ pub fn finalize(
 ```
 
 ```rust
+// 小白提示：这段代码演示【版本 B：Sync 核心，异步 Shell】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // shell.rs — 薄 async 协调器
 //
 // 注意：网络调用上的 `?` 需要 `impl From<reqwest::Error> for OrderError`
@@ -139,6 +142,7 @@ pub async fn process_order(order: Order) -> Result<Receipt, OrderError> {
 同步核心测试每个业务规则，无需Runtime 或模拟：
 
 ```rust
+// 小白提示：这段代码演示【测试差异】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 #[test]
 fn out_of_stock_rejects_order() {
     let order = validated_order(vec![item("widget", 10)]);
@@ -159,6 +163,7 @@ fn discount_applied_correctly() {
 异步 shell 获得更薄的“集成”测试，用于验证接线，而不是逻辑：
 
 ```rust
+// 小白提示：这段代码演示【测试差异】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 #[tokio::test]
 async fn process_order_integration() {
     let mock_inventory = mock_service(/* 返回库存 */);
@@ -189,6 +194,7 @@ async fn process_order_integration() {
 但如果您发现自己将大段代码包装在 `spawn_blocking` 中：
 
 ```rust
+// 小白提示：这段代码演示【`spawn_blocking` 气味】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 async fn handler(req: Request) -> Response {
     // 如果这是您的代码库，则边界位于错误的位置
     tokio::task::spawn_blocking(move || {
@@ -204,6 +210,7 @@ async fn handler(req: Request) -> Response {
 ...这就是代码库告诉您：**这个逻辑从一开始就不是异步的。**您不需要 `spawn_blocking` — 您需要一个异步处理程序直接调用的同步模块：
 
 ```rust
+// 小白提示：这段代码演示【`spawn_blocking` 气味】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 async fn handler(req: Request) -> Response {
     // 验证→丰富→处理→格式都是同步的。
     // 不需要 spawn_blocking — 它们速度快且 CPU 轻。
@@ -219,6 +226,7 @@ async fn handler(req: Request) -> Response {
 对于图书馆作者来说，边界问题更为重要。同步和异步调用者都可以使用同步库：
 
 ```rust
+// 小白提示：这段代码演示【库：Sync 首先，异步包装器可选】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // 同步库——随处可用
 let report = my_lib::analyze(&data);
 
@@ -247,6 +255,7 @@ async fn handler_heavy() -> Json<Report> {
 异步库强制*所有*调用者进入Runtime：
 
 ```rust
+// 小白提示：这段代码演示【库：Sync 首先，异步包装器可选】。先看类型/函数签名，再看 .await、poll、spawn 等关键调用怎样推动异步任务。
 // async 库 — 只能在 async 上下文中使用
 let report = my_lib::analyze(&data).await; // 呼叫者必须是 async
 
@@ -298,6 +307,7 @@ graph TD
 以下axum处理程序具有异步污染——业务逻辑与I/O混合。将其重构为同步核心模块和瘦异步外壳。
 
 ```rust
+// 小白提示：这是待重构的反例。注意业务计算和 HTTP 请求混在一个 async handler 里，导致测试和复用都变重。
 use axum::{Json, extract::Path};
 
 async fn get_device_report(Path(device_id): Path<String>) -> Result<Json<Report>, AppError> {
@@ -362,6 +372,7 @@ async fn get_device_report(Path(device_id): Path<String>) -> Result<Json<Report>
 <summary>🔑 参考答案</summary>
 
 ```rust
+// 小白提示：这是同步核心 core.rs。这里没有 async/.await，只处理已经拿到的数据，所以普通 #[test] 就能测业务规则。
 // core.rs — 零 async 依赖
 
 pub fn calibrate_sensors(raw: &RawTelemetry) -> Result<Vec<CalibratedReading>, AppError> {
@@ -406,6 +417,7 @@ pub fn build_report(
 ```
 
 ```rust
+// 小白提示：这是异步外壳 shell.rs。它只负责发 HTTP 请求和 await，然后把数据交给同步核心处理。
 // shell.rs — 仅保留 async 边界
 
 pub async fn get_device_report(
@@ -428,6 +440,7 @@ pub async fn get_device_report(
 ```
 
 ```rust
+// 小白提示：这是同步核心的测试。因为没有网络和 Runtime，测试只需要构造输入数据并检查业务规则输出。
 // core_tests.rs — 不需要 Runtime
 
 // 测试夹具助手——构建没有任何I/O的数据
