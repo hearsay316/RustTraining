@@ -1,0 +1,27 @@
+.language-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.language-switcher a {
+  border: 1px solid var(--theme-popup-border);
+  border-radius: 4px;
+  color: var(--fg);
+  line-height: 1;
+  padding: 0.35rem 0.5rem;
+  text-decoration: none;
+}
+
+.language-switcher a:hover {
+  background: var(--theme-hover);
+  text-decoration: none;
+}
+
+.language-switcher a.active {
+  background: var(--sidebar-active);
+  color: var(--sidebar-bg);
+  font-weight: 600;
+}

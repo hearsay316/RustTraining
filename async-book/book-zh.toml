@@ -1,11 +1,11 @@
 [book]
-title = "Async Rust: From Futures to Production"
+title = "Async Rust：从 Future 到生产实践"
 authors = ["Rust Training Team"]
-language = "en"
-src = "src"
+language = "zh-CN"
+src = "src-zh"
 
 [build]
-build-dir = "book"
+build-dir = "book-zh"
 
 [output.html]
 git-repository-url = "https://github.com/microsoft/RustTraining"

@@ -144,14 +144,19 @@ fn build_to(dir_name: &str) {
             continue;
         }
         let dest = out.join(slug);
-        let status = Command::new("mdbook")
-            .args(["build", "--dest-dir"])
-            .arg(&dest)
-            .current_dir(&book_dir)
-            .status()
-            .expect("failed to run mdbook — is it installed?");
+        let status = if slug == "async-book" {
+            build_async_book(&book_dir, &dest)
+        } else {
+            Command::new("mdbook")
+                .args(["build", "--dest-dir"])
+                .arg(&dest)
+                .current_dir(&book_dir)
+                .status()
+                .expect("failed to run mdbook — is it installed?")
+                .success()
+        };
 
-        if status.success() {
+        if status {
             println!("  ✓ {slug}");
             ok += 1;
         } else {
@@ -165,6 +170,69 @@ fn build_to(dir_name: &str) {
     // Prevent GitHub Pages from processing the output with Jekyll
     fs::write(out.join(".nojekyll"), "").expect("failed to create .nojekyll");
     println!("\nDone! Output in {dir_name}/");
+}
+
+fn build_async_book(book_dir: &Path, dest: &Path) -> bool {
+    let en_ok = Command::new("mdbook")
+        .args(["build", "--dest-dir"])
+        .arg(dest)
+        .current_dir(book_dir)
+        .status()
+        .expect("failed to run mdbook — is it installed?")
+        .success();
+
+    if !en_ok {
+        return false;
+    }
+
+    let zh_work = book_dir.join(".mdbook-zh-work");
+    if zh_work.exists() {
+        fs::remove_dir_all(&zh_work).expect("failed to clean async zh work dir");
+    }
+    fs::create_dir_all(&zh_work).expect("failed to create async zh work dir");
+
+    copy_dir_all(&book_dir.join("src-zh"), &zh_work.join("src-zh"))
+        .expect("failed to copy async zh source");
+    for file in [
+        "book-zh.toml",
+        "mermaid.min.js",
+        "mermaid-init.js",
+        "language-switcher.css",
+        "language-switcher.js",
+    ] {
+        let target = if file == "book-zh.toml" {
+            zh_work.join("book.toml")
+        } else {
+            zh_work.join(file)
+        };
+        fs::copy(book_dir.join(file), target).expect("failed to copy async zh asset");
+    }
+
+    let zh_ok = Command::new("mdbook")
+        .args(["build", "--dest-dir"])
+        .arg(dest.join("zh"))
+        .current_dir(&zh_work)
+        .status()
+        .expect("failed to run mdbook — is it installed?")
+        .success();
+
+    let _ = fs::remove_dir_all(&zh_work);
+    zh_ok
+}
+
+fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let target = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &target)?;
+        } else {
+            fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
 }
 
 fn category_label(cat: &str) -> &str {

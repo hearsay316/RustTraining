@@ -49,12 +49,12 @@ Pick the book that matches your background. Books are grouped by complexity so y
 | [**Rust for C/C++ Programmers**](https://microsoft.github.io/RustTraining/c-cpp-book/) | 🟢 Bridge | Move semantics, RAII, FFI, embedded, no_std |
 | [**Rust for C# Programmers**](https://microsoft.github.io/RustTraining/csharp-book/) | 🟢 Bridge | Swift / C# / Java → ownership & type system |
 | [**Rust for Python Programmers**](https://microsoft.github.io/RustTraining/python-book/) | 🟢 Bridge | Dynamic → static typing, GIL-free concurrency |
-| [**Async Rust**](https://microsoft.github.io/RustTraining/async-book/) | 🔵 Deep Dive | Tokio, streams, cancellation safety |
+| [**Async Rust**](https://microsoft.github.io/RustTraining/async-book/) / [中文](https://microsoft.github.io/RustTraining/async-book/zh/) | 🔵 Deep Dive | Tokio, streams, cancellation safety |
 | [**Rust Patterns**](https://microsoft.github.io/RustTraining/rust-patterns-book/) | 🟡 Advanced | Pin, allocators, lock-free structures, unsafe |
 | [**Type-Driven Correctness**](https://microsoft.github.io/RustTraining/type-driven-correctness-book/) | 🟣 Expert | Type-state, phantom types, capability tokens |
 | [**Rust Engineering Practices**](https://microsoft.github.io/RustTraining/engineering-book/) | 🟤 Practices | Build scripts, cross-compilation, CI/CD, Miri |
 
-Each book has 15–16 chapters with Mermaid diagrams, editable Rust playgrounds, exercises, and full-text search.
+Each book has 15–16 chapters with Mermaid diagrams, editable Rust playgrounds, exercises, and full-text search. Async Rust is available in English and Simplified Chinese.
 
 > **Tip:** Browse the rendered books with sidebar navigation and search at the [GitHub Pages site](https://microsoft.github.io/RustTraining/).
 >
