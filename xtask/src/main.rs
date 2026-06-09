@@ -251,12 +251,22 @@ fn write_landing_page(site: &Path) {
         .iter()
         .map(|&(slug, title, desc, cat)| {
             let label = category_label(cat);
-            format!(
-                r#"    <a class="card cat-{cat}" href="{slug}/">
+            if slug == "async-book" {
+                format!(
+                    r#"    <div class="card cat-{cat}">
+      <h2>{title} <span class="label">{label}</span></h2>
+      <p>{desc}</p>
+      <p class="links"><a href="{slug}/">English</a><a href="{slug}/zh/">中文</a></p>
+    </div>"#
+                )
+            } else {
+                format!(
+                    r#"    <a class="card cat-{cat}" href="{slug}/">
       <h2>{title} <span class="label">{label}</span></h2>
       <p>{desc}</p>
     </a>"#
-            )
+                )
+            }
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -333,6 +343,9 @@ fn write_landing_page(site: &Path) {
     }}
     .card h2 {{ font-size: 1.2rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }}
     .card p  {{ color: var(--muted); font-size: 0.9rem; line-height: 1.4; }}
+    .card .links {{ display: flex; gap: 0.75rem; margin-top: 0.9rem; }}
+    .card .links a {{ color: var(--accent); font-weight: 600; text-decoration: none; }}
+    .card .links a:hover {{ text-decoration: underline; }}
 
     /* Category colours */
     .cat-bridge     {{ --stripe: var(--clr-bridge); }}
