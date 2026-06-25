@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -c \"小白提示\" *.md)",
+      "Bash(mdbook --version)",
+      "Bash(cargo install:*)",
+      "Bash(mkdir:*)",
+      "Bash(mdbook-epub --standalone c-cpp-book)",
+      "Bash(mv c-cpp-book/book.epub epub/Rust_for_CCpp_Programmers.epub)",
+      "Bash(mdbook-epub --standalone csharp-book)",
+      "Bash(mv csharp-book/book.epub epub/Rust_for_CSharp_Programmers.epub)",
+      "Bash(mdbook-epub --standalone python-book)",
+      "Bash(mv python-book/book.epub epub/Rust_for_Python_Programmers.epub)",
+      "Bash(mdbook-epub --standalone async-book)",
+      "Bash(mv async-book/book.epub epub/Async_Rust_EN.epub)"
+    ]
+  }
+}
