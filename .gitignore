@@ -8,3 +8,6 @@ target/
 
 # Zone.Identifier files (Windows/WSL artifact)
 *:Zone.Identifier
+.epub_zh_build
+.epub_en_build
+.epub_zh_tmp

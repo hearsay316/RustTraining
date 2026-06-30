@@ -146,6 +146,8 @@ fn build_to(dir_name: &str) {
         let dest = out.join(slug);
         let status = if slug == "async-book" {
             build_async_book(&book_dir, &dest)
+        } else if slug == "rust-patterns-book" {
+            build_rust_patterns_book(&book_dir, &dest)
         } else {
             Command::new("mdbook")
                 .args(["build", "--dest-dir"])
@@ -220,6 +222,48 @@ fn build_async_book(book_dir: &Path, dest: &Path) -> bool {
     zh_ok
 }
 
+fn build_rust_patterns_book(book_dir: &Path, dest: &Path) -> bool {
+    let en_ok = Command::new("mdbook")
+        .args(["build", "--dest-dir"])
+        .arg(dest)
+        .current_dir(book_dir)
+        .status()
+        .expect("failed to run mdbook — is it installed?")
+        .success();
+
+    if !en_ok {
+        return false;
+    }
+
+    let zh_work = book_dir.join(".mdbook-zh-work");
+    if zh_work.exists() {
+        fs::remove_dir_all(&zh_work).expect("failed to clean rust-patterns zh work dir");
+    }
+    fs::create_dir_all(&zh_work).expect("failed to create rust-patterns zh work dir");
+
+    copy_dir_all(&book_dir.join("src-zh"), &zh_work.join("src-zh"))
+        .expect("failed to copy rust-patterns zh source");
+    for file in ["book-zh.toml", "mermaid.min.js", "mermaid-init.js"] {
+        let target = if file == "book-zh.toml" {
+            zh_work.join("book.toml")
+        } else {
+            zh_work.join(file)
+        };
+        fs::copy(book_dir.join(file), target).expect("failed to copy rust-patterns zh asset");
+    }
+
+    let zh_ok = Command::new("mdbook")
+        .args(["build", "--dest-dir"])
+        .arg(dest.join("zh"))
+        .current_dir(&zh_work)
+        .status()
+        .expect("failed to run mdbook — is it installed?")
+        .success();
+
+    let _ = fs::remove_dir_all(&zh_work);
+    zh_ok
+}
+
 fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
@@ -251,7 +295,7 @@ fn write_landing_page(site: &Path) {
         .iter()
         .map(|&(slug, title, desc, cat)| {
             let label = category_label(cat);
-            if slug == "async-book" {
+            if slug == "async-book" || slug == "rust-patterns-book" {
                 format!(
                     r#"    <div class="card cat-{cat}">
       <h2>{title} <span class="label">{label}</span></h2>
