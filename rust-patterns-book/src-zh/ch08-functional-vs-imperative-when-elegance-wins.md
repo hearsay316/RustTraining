@@ -13,10 +13,11 @@ Rust 让你在函数式和命令式风格之间获得了真正的对等。不像
 许多 Rust 开发者会这样写：
 
 ```rust
-let value = if let Some(x) = maybe_config() {
-    x
+// === 命令式风格：用 if let 手动解包 Option，可读但啰嗦 ===
+let value = if let Some(x) = maybe_config() {  // maybe_config() -> Option<Config>
+    x                                          // → 提取内部值
 } else {
-    default_config()
+    default_config()                           // → None 时调用回退函数
 };
 process(value);
 ```
@@ -24,7 +25,11 @@ process(value);
 而他们其实可以写成这样：
 
 ```rust
+// → unwrap_or_else<F>(self, f: F) -> T where F: FnOnce() -> T
+//   仅在 Option 为 None 时才惰性调用 f，避免无谓的默认值计算
 process(maybe_config().unwrap_or_else(default_config));
+//                ^^^^^^^^^^^^^^ maybe_config() -> Option<Config>
+//                                unwrap_or_else 接收一个返回 Config 的闭包
 ```
 
 或者这个常见模式：
@@ -40,9 +45,11 @@ let display_name = if let Some(name) = user.nickname() {
 其实可以这样写：
 
 ```rust
-let display_name = user.nickname()
-    .map(|n| n.to_uppercase())
-    .unwrap_or_else(|| "ANONYMOUS".to_string());
+// === map 转换 + unwrap_or_else 回退：函数式组合 Option ===
+let display_name = user.nickname()           // -> Option<&str>
+    .map(|n| n.to_uppercase())               // → Option::map<F,U>(self, f) -> Option<U>
+                                              //   Some(x) => Some(f(x))，None => None
+    .unwrap_or_else(|| "ANONYMOUS".to_string()); // → None 时惰性求值默认值
 ```
 
 函数式版本不仅更短——它告诉你*发生了什么*（转换，然后取默认值），而不需要你去追踪控制流。`if let` 版本需要你阅读两个分支才能弄清楚两条路径最终到达同一个地方。
@@ -95,8 +102,9 @@ let display_name = user.nickname()
 另一个比想象中更常见的模式：
 
 ```rust
+// === 命令式：if 分支驱动列表构建 ===
 let label = if is_admin {
-    Some("ADMIN")
+    Some("ADMIN")    // → Option<&str>
 } else {
     None
 };
@@ -105,12 +113,16 @@ let label = if is_admin {
 Rust 1.62+ 让你可以这样写：
 
 ```rust
+// → bool::then_some<T>(self, t: T) -> Option<T>
+//   true => Some(t)，false => None（值的直接拷贝，非惰性）
 let label = is_admin.then_some("ADMIN");
 ```
 
 或者使用计算值：
 
 ```rust
+// → bool::then<T, F>(self, f: F) -> Option<T> where F: FnOnce() -> T
+//   true => Some(f())，false => None。闭包惰性求值，避免无谓计算
 let permissions = is_admin.then(|| compute_admin_permissions());
 ```
 
@@ -123,15 +135,15 @@ if user.is_admin { tags.push("admin"); }
 if user.is_verified { tags.push("verified"); }
 if user.score > 100 { tags.push("power-user"); }
 
-// 函数式
+// === 函数式：用 then_some 生成 Option，再展平收集 ===
 let tags: Vec<&str> = [
-    user.is_admin.then_some("admin"),
+    user.is_admin.then_some("admin"),         // → Option<&str>，false 时为 None
     user.is_verified.then_some("verified"),
     (user.score > 100).then_some("power-user"),
 ]
-.into_iter()
-.flatten()
-.collect();
+.into_iter()                                  // → 将数组转为迭代器，元素类型为 Option<&str>
+.flatten()                                    // → Iterator::flatten：自动跳过 None，展平 Some(v) 为 v
+.collect();                                   // → 从迭代器收集为 Vec<&str>
 ```
 
 函数式版本让模式变得明确："从条件元素构建列表"。命令式版本需要你阅读每个 `if` 来确认它们都在做同样的事（推送一个标签）。
@@ -159,12 +171,16 @@ for item in inventory {
     }
 }
 
-// 函数式：6 行，0 个可变变量，一条管道
+// === 函数式：6 行，0 个可变变量，一条管道 ===
 let results: Vec<_> = inventory.iter()
+    // → iter() 借用迭代器：&Item；filter<P>(self, predicate) 只保留满足条件的元素
     .filter(|item| item.category == Category::Server)
+    // → filter_map<B,F>(self, f)：同时做 filter + map，闭包返回 Option，
+    //   None 丢弃、Some(v) 保留 v。比 .filter().map() 更高效（单次遍历）
     .filter_map(|item| item.last_temperature().map(|t| (item.id, t)))
     .filter(|(_, temp)| *temp > 80.0)
-    .collect();
+    .collect();    // → collect<B>(self) -> B where B: FromIterator
+                   //   由类型标注 Vec<_> 决定收集目标
 ```
 
 函数式版本胜出，因为：
@@ -185,16 +201,21 @@ for server in fleet {
 }
 let avg = total_power / count as f64;
 
-// 函数式
+// === 函数式：fold 将迭代器归约为单个值 ===
 let (total_power, count) = fleet.iter()
-    .map(|s| s.power_draw())
+    .map(|s| s.power_draw())    // → Iterator::map<B,F>(self, f) -> Map<Self,F>
+                                 //   对每个元素应用闭包，产生新迭代器
     .fold((0.0, 0usize), |(sum, n), p| (sum + p, n + 1));
+    // ↑ fold<B,F>(self, init, f) -> B：左折叠累加器
+    //   签名 f: FnMut(B, Item) -> B，B 为累加器类型（此处是元组）
 let avg = total_power / count as f64;
 ```
 
 如果你只需要求和，还可以更简单：
 
 ```rust
+// → Iterator::sum<S>(self) -> S where S: Sum<Item>
+//   标准库内置的求和组合子，比手写 fold 更简洁
 let total: f64 = fleet.iter().map(|s| s.power_draw()).sum();
 ```
 
@@ -217,8 +238,9 @@ for server in fleet {
 
 // 函数式版本则很牵强
 let best_candidate = fleet.iter()
-    .filter(|s| evaluate(s) > threshold)
-    .find(|s| s.is_available());
+    .filter(|s| evaluate(s) > threshold)   // → filter<P>：保留满足谓词的元素
+    .find(|s| s.is_available());           // → find<P>(&mut self, predicate) -> Option<Self::Item>
+                                            //   返回第一个满足条件的元素，找到即短路停止迭代
 ```
 
 等等——那个函数式版本其实也挺清晰的。让我们试一个它真正输掉的例子：
@@ -250,6 +272,7 @@ for event in log_stream {
 
 // 函数式版本：牵强、别扭，没人想读这样的代码
 let (warnings, errors, stats) = log_stream.iter().fold(
+    // → fold 用三元组做累加器：三个 Vec/Stats 同时更新
     (Vec::new(), Vec::new(), Stats::default()),
     |(mut w, mut e, mut s), event| {
         match event.severity {
@@ -260,7 +283,7 @@ let (warnings, errors, stats) = log_stream.iter().fold(
             }
             _ => s.other_count += 1,
         }
-        (w, e, s)
+        (w, e, s)   // → 每步必须返回新累加器（元组）
     },
 );
 ```
@@ -323,16 +346,18 @@ flowchart TB
 Rust 的代码块是表达式。这让你可以将可变性限制在构建阶段，并将结果绑定为不可变：
 
 ```rust
+// === 作用域化可变性：内部命令式构建，外部不可变绑定 ===
 use rand::random;
 
 let samples = {
-    let mut buf = Vec::with_capacity(10);
+    // ↓ mut buf 仅在此块内有效
+    let mut buf = Vec::with_capacity(10);  // → Vec::with_capacity(n)：预分配容量，避免重分配
     while buf.len() < 10 {
         let reading: f64 = random();
-        buf.push(reading);
+        buf.push(reading);                 // → Vec::push：追加元素
         if random::<u8>() % 3 == 0 { break; } // 随机提前停止
     }
-    buf
+    buf                                    // → 块表达式返回 buf，所有权转移给 samples
 };
 // samples 是不可变的——包含 1 到 10 个元素
 ```
@@ -343,8 +368,9 @@ let samples = {
 
 ```rust
 let samples: Vec<f64> = std::iter::from_fn(|| Some(random()))
-    .take(10)
-    .take_while(|_| random::<u8>() % 3 != 0)
+    // → from_fn<T, F>(f: F) -> FromFn<F>：由闭包按需产生元素的迭代器
+    .take(10)                                  // → take(n)：最多取 n 个元素
+    .take_while(|_| random::<u8>() % 3 != 0)   // → take_while<P>：谓词为真时持续取
     .collect();
 ```
 
@@ -370,6 +396,8 @@ let samples: Vec<f64> = std::iter::from_fn(|| Some(random()))
 // 这条 and_then 链...
 fn load_config() -> Result<Config, Error> {
     read_file("config.toml")
+        // → and_then<U,F>(self, op: F) -> Result<U, E>
+        //   Ok(x) => op(x)（链式串联可能失败的操作），Err(e) => Err(e)（短路传播）
         .and_then(|contents| parse_toml(&contents))
         .and_then(|table| validate_config(table))
         .and_then(|valid| Config::from_validated(valid))
@@ -377,6 +405,8 @@ fn load_config() -> Result<Config, Error> {
 
 // ...完全等价于这样写
 fn load_config() -> Result<Config, Error> {
+    // → ? 运算符：Ok(v) 解包为 v，Err(e) 触发 return Err(From::from(e))
+    //   相当于 and_then 但允许提前返回并提供命名中间变量
     let contents = read_file("config.toml")?;
     let table = parse_toml(&contents)?;
     let valid = validate_config(table)?;
@@ -398,7 +428,11 @@ fn load_config() -> Result<Config, Error> {
 // 在 Option 内部转换，不使用提前返回
 let port: Option<u16> = config.get("port")
     .and_then(|v| v.parse::<u16>().ok())
+    // → and_then<U,F>：Option 版本，Some(x) => f(x)，None => None
+    //   v.parse::<u16>() -> Result<u16, ParseIntError>，.ok() 转为 Option<u16>
     .filter(|&p| p > 0 && p < 65535);
+    // → Option::filter<P>(self, predicate) -> Option<T>
+    //   Some(x) 满足谓词则保留，否则变 None
 ```
 
 这里你不能使用 `?`，因为没有可以返回的外层函数——你是在构建一个 `Option`，而不是在传播它。
@@ -422,7 +456,10 @@ for s in input_strings {
 // 函数式：收集到 Result<Vec<_>, _>
 let numbers: Vec<i64> = input_strings.iter()
     .map(|s| s.parse::<i64>().map_err(|_| Error::BadInput(s.clone())))
+    // → map_err<F,E0>(self, op) -> Result<T, F>：仅转换错误类型，Ok 值不变
     .collect::<Result<_, _>>()?;
+    // → collect 到 Result<Vec<_>, _>：Result 实现了 FromIterator，
+    //   遇到第一个 Err 即短路（与带 ? 的循环语义一致）
 ```
 
 `collect::<Result<Vec<_>, _>>()` 这个技巧之所以有效，是因为 `Result` 实现了 `FromIterator`。它会在第一个 `Err` 处短路，就像带 `?` 的循环一样。
@@ -438,8 +475,10 @@ for server in fleet {
 
 // 函数式
 let index: HashMap<_, _> = fleet.into_iter()
-    .map(|s| (s.id.clone(), s))
+    .map(|s| (s.id.clone(), s))   // → 每个元素映射为 (键, 值) 元组
     .collect();
+    // → collect 到 HashMap：HashMap 实现了 FromIterator<(K,V)>，
+    //   类型标注 HashMap<_, _> 让编译器推断键值类型
 ```
 
 ### 收集到 String
@@ -457,9 +496,9 @@ let csv = fields.join(",");
 
 // 或者更复杂的格式化：
 let csv: String = fields.iter()
-    .map(|f| format!("\"{f}\""))
-    .collect::<Vec<_>>()
-    .join(",");
+    .map(|f| format!("\"{f}\""))        // → 每个字段加引号
+    .collect::<Vec<_>>()                 // → 先收集为 Vec<String>（需分配）
+    .join(",");                          // → slice::join(separator)：用分隔符拼接为 String
 ```
 
 ### 循环版本何时胜出
@@ -513,13 +552,14 @@ fn status_message(code: StatusCode) -> &'static str {
 // 解析命令——每个分支提取并转换
 fn execute(cmd: Command) -> Result<Response, Error> {
     match cmd {
+        // → db.get -> Result<Value, Error>，.map(Response::Value) 转换成功值
         Command::Get { key } => db.get(&key).map(Response::Value),
         Command::Set { key, value } => db.set(key, value).map(|_| Response::Ok),
         Command::Delete { key } => db.delete(&key).map(|_| Response::Ok),
         Command::Batch(cmds) => cmds.into_iter()
-            .map(execute)
-            .collect::<Result<Vec<_>, _>>()
-            .map(Response::Batch),
+            .map(execute)                              // → 递归处理每条子命令
+            .collect::<Result<Vec<_>, _>>()            // → 收集到 Result，遇错短路
+            .map(Response::Batch),                     // → 全部成功时包装为 Batch
     }
 }
 ```
@@ -534,12 +574,13 @@ fn execute(cmd: Command) -> Result<Response, Error> {
 
 ```rust
 // 这是一条在你自定义类型上的组合子链
+// → 构建器模式：每个方法接收 self 并返回 Self，支持链式调用
 let query = QueryBuilder::new("servers")
-    .filter("status", Eq, "active")
+    .filter("status", Eq, "active")     // → &mut self / self -> Self
     .filter("rack", In, &["A1", "A2", "B1"])
     .order_by("temperature", Desc)
     .limit(50)
-    .build();
+    .build();                            // → 终结方法：消耗 builder，产出最终 Query
 ```
 
 **关键洞见：**如果你的类型有接受 `self` 并返回 `Self`（或转换后的类型）的方法，你就构建了一个组合子。同样的函数式/命令式判断也适用：
@@ -547,9 +588,11 @@ let query = QueryBuilder::new("servers")
 ```rust
 // 好：可链式调用，因为每一步都是简单的转换
 let config = Config::default()
+    // → Default::default()：零值初始化；with_* 接收 self 返回 Self（组合子）
     .with_timeout(Duration::from_secs(30))
     .with_retries(3)
     .with_tls(true);
+    // → Duration::from_secs(u64) -> Duration：构造时间段
 
 // 坏：可链式调用，但链做了太多不相关的事
 let result = processor
@@ -577,10 +620,13 @@ notify_downstream()?;
 在 Rust 中，**迭代器链编译为与手写循环相同的机器码。**LLVM 会内联闭包调用，消除迭代器适配器结构体，并经常产生相同的汇编代码。这被称为*零成本抽象*，它不是理想——而是经过验证的。
 
 ```rust
+// === 零成本抽象：函数式链与命令式循环生成相同汇编 ===
 // 这些在 release 构建中会产生相同的汇编代码：
 
 // 函数式
 let sum: i64 = (0..1000).filter(|n| n % 2 == 0).map(|n| n * n).sum();
+// → filter/map 是惰性适配器，sum 是消费适配器
+//   LLVM 内联闭包后与下方循环等价
 
 // 命令式
 let mut sum: i64 = 0;
@@ -621,15 +667,15 @@ for n in 0..1000 {
 ```rust
 // 这不是优雅。这是个谜题。
 let result = data.iter()
-    .filter_map(|x| x.metadata.as_ref())
-    .flat_map(|m| m.tags.iter())
+    .filter_map(|x| x.metadata.as_ref())   // → filter_map：filter+map 合一
+    .flat_map(|m| m.tags.iter())           // → flat_map<U,F>：每个元素展开为多个
     .filter(|t| t.starts_with("env:"))
-    .map(|t| t.strip_prefix("env:").unwrap())
+    .map(|t| t.strip_prefix("env:").unwrap()) // → str::strip_prefix(&self, p) -> Option<&str>
     .filter(|env| allowed_envs.contains(env))
     .map(|env| env.to_uppercase())
-    .collect::<HashSet<_>>()
+    .collect::<HashSet<_>>()               // → collect 去重
     .into_iter()
-    .sorted()
+    .sorted()                              // → itertools 扩展，原地排序的链式版本
     .collect::<Vec<_>>();
 ```
 
@@ -661,6 +707,7 @@ for item in &list {
 }
 
 // 改成这样
+// → Iterator::any<F>(&mut self, f) -> bool：任一元素满足谓词即返回 true（短路）
 let found = list.iter().any(|item| item.is_expired());
 ```
 
@@ -675,6 +722,8 @@ for server in &fleet {
 }
 
 // 改成这样
+// → Iterator::find<P>(&mut self, predicate) -> Option<Self::Item>
+//   返回第一个满足条件的元素的引用，找到即短路
 let target = fleet.iter().find(|s| s.id == target_id);
 ```
 
@@ -689,6 +738,7 @@ for server in &fleet {
 }
 
 // 改成这样
+// → Iterator::all<F>(&mut self, f) -> bool：所有元素都满足谓词才 true（遇 false 短路）
 let all_healthy = fleet.iter().all(|s| s.is_healthy());
 ```
 
@@ -751,12 +801,15 @@ fn summarize_fleet(fleet: &[Server]) -> FleetSummary {
 
 ```rust
 fn summarize_fleet(fleet: &[Server]) -> FleetSummary {
+    // → sum::<f64>()：必须用 turbofish 指定求和类型，否则无法推断
     let avg_power: f64 = fleet.iter().map(|s| s.power_draw()).sum::<f64>()
         / fleet.len() as f64;
 
     let max_temp = fleet.iter()
         .map(|s| s.max_temperature())
         .fold(f64::NEG_INFINITY, f64::max);
+        // ↑ fold(init, f)：f64::max 是 fn(f64,f64)->f64，等价于取最大值
+        //   也可写 .fold(f64::NEG_INFINITY, |a, b| a.max(b))
 
     // 但三分区用循环更好。
     // 函数式版本要么需要三次单独遍历，

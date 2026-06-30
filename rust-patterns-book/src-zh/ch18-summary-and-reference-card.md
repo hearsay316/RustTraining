@@ -72,13 +72,19 @@
 编译器在三种情况下会自动插入生命周期（这样你就不必手动写）：
 
 ```rust
+// 生命周期省略（elision）规则 —— 编译器自动推断，无需手写。
+// → 'a 是生命周期参数，表示引用的有效范围。
+
 // 规则 1：每个引用参数获得自己的生命周期
+// → 不带 self 的函数，每个引用入参各得一个独立生命周期。
 // fn foo(x: &str, y: &str)  →  fn foo<'a, 'b>(x: &'a str, y: &'b str)
 
 // 规则 2：如果只有一个输入生命周期，它用于所有输出
+// → 单一输入引用时，输出引用共享同一生命周期（生命周期一致）。
 // fn foo(x: &str) -> &str   →  fn foo<'a>(x: &'a str) -> &'a str
 
 // 规则 3：如果某个参数是 &self 或 &mut self，它的生命周期被使用
+// → 方法的输出引用默认绑定 self 的生命周期（方法返回的引用不能活得比 &self 更久）。
 // fn foo(&self, x: &str) -> &str  →  fn foo<'a>(&'a self, x: &str) -> &'a str
 ```
 
@@ -90,14 +96,15 @@
 ### 常见 Derive Trait
 
 ```rust
+// → #[derive(...)]：派生宏，为类型自动实现常用 trait，无需手写 impl。
 #[derive(
-    Debug,          // {:?} 格式化
-    Clone,          // .clone()
-    Copy,           // 隐式拷贝（仅适用于简单类型）
-    PartialEq, Eq,  // == 比较
-    PartialOrd, Ord, // < > 比较 + 排序
-    Hash,           // HashMap/HashSet 键
-    Default,        // Type::default()
+    Debug,          // → 实现 Debug，支持 {:?} 格式化打印（调试用）。
+    Clone,          // → 实现 Clone，支持 .clone() 显式深拷贝。
+    Copy,           // → 实现 Copy，赋值时隐式按位复制（仅适用于简单类型，无 Drop）。
+    PartialEq, Eq,  // → 实现 == / != 比较；Eq 要求全等（Eq 需 Self: PartialEq）。
+    PartialOrd, Ord, // → 实现 < > 比较 + 排序；Ord 提供全序（cmp）。
+    Hash,           // → 实现 Hash，使类型可作 HashMap/HashSet 的键。
+    Default,        // → 实现 Default，支持 Type::default() 构造默认值。
 )]
 struct MyType { /* ... */ }
 ```

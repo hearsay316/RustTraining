@@ -11,49 +11,68 @@
 Rust 的错误处理围绕 `Result<T, E>` 类型展开。有两个 crate 占据主导地位：
 
 ```rust,ignore
+// ============================================================
+// thiserror（库） vs anyhow（应用程序）—— 错误处理两种范式对比
+// ============================================================
+// thiserror：通过派生宏生成 Error + Display + From 实现，错误类型具体可匹配
+// anyhow：动态错误类型，适合只需"传播错误"的顶层代码
+
 // --- thiserror：用于库 ---
 // 通过派生宏生成 Display、Error 和 From 实现
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+// → thiserror::Error 派生宏：自动实现 std::error::Error + Display
 pub enum DatabaseError {
     #[error("connection failed: {0}")]
+    // → #[error("...")]：为该变体生成 Display 实现，{0} 引用第一个字段
     ConnectionFailed(String),
 
     #[error("query error: {source}")]
     QueryError {
         #[source]
         source: sqlx::Error,
+        // → #[source]：标记错误来源，构成错误因果链（source() 方法）
     },
 
     #[error("record not found: table={table} id={id}")]
     NotFound { table: String, id: u64 },
+    // → 命名字段可用 {field} 在格式串中引用
 
     #[error(transparent)] // 将 Display 委托给内部错误
     Io(#[from] std::io::Error), // 自动生成 From<io::Error>
+    // → #[from]：自动生成 From<io::Error> 实现，使 ? 运算符能自动转换
+    //   #[error(transparent)]：Display 直接委托给内部错误
 }
 
 // --- anyhow：用于应用程序 ---
 // 动态错误类型——适合顶层代码，只需让错误传播即可
 use anyhow::{Context, Result, bail, ensure};
+// → anyhow::Result<T> = Result<T, anyhow::Error>：错误类型擦除为 trait object
 
 fn read_config(path: &str) -> Result<Config> {
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read config from {path}"))?;
+        // → with_context<F>(self, f) -> Result<T, ContextedError>
+        //   仅在 Err 时惰性求值闭包，附加上下文信息
 
     let config: Config = serde_json::from_str(&content)
         .context("failed to parse config JSON")?;
+        // → context(self, what) -> Result<T>：附加静态上下文
 
     ensure!(config.port > 0, "port must be positive, got {}", config.port);
+    // → ensure!：条件为假时返回 Err（anyhow 宏，类似 assert! 但返回而非 panic）
 
     Ok(config)
 }
 
 fn main() -> Result<()> {
+    // → main() -> Result<()>：Rust 允许 main 返回 Result，Err 时打印并退出码 1
     let config = read_config("server.toml")?;
 
     if config.name.is_empty() {
         bail!("server name cannot be empty"); // 立即返回 Err
+        // → bail!(msg)：宏，立即从函数返回 anyhow::Error
     }
 
     Ok(())
@@ -72,12 +91,15 @@ fn main() -> Result<()> {
 ### 错误转换链（#[from]）
 
 ```rust,ignore
+// === 错误转换链：#[from] 自动生成 From 实现 ===
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 enum AppError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+    // → #[from] 生成：impl From<std::io::Error> for AppError
+    //   使 ? 能将 io::Error 自动转为 AppError::Io
 
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
@@ -89,6 +111,8 @@ enum AppError {
 // 现在 ? 会自动转换：
 fn fetch_and_parse(url: &str) -> Result<Config, AppError> {
     let body = reqwest::blocking::get(url)?.text()?;  // reqwest::Error → AppError::Http
+    // → ? 运算符：Err(e) 时调用 From::from(e) 自动转换错误类型
+    //   .text()：响应体转为 String（也可能返回 reqwest::Error）
     let config: Config = serde_json::from_str(&body)?; // serde_json::Error → AppError::Json
     Ok(config)
 }
@@ -99,17 +123,20 @@ fn fetch_and_parse(url: &str) -> Result<Config, AppError> {
 在不丢失原始错误的情况下添加人类可读的上下文：
 
 ```rust,ignore
+// === 上下文包装：在传播错误时叠加人类可读信息 ===
 use anyhow::{Context, Result};
 
 fn process_file(path: &str) -> Result<Data> {
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read {path}"))?;
+        // → with_context：闭包惰性求值（仅 Err 时执行），适合高开销上下文
 
     let data = parse_content(&content)
         .with_context(|| format!("failed to parse {path}"))?;
 
     validate(&data)
         .context("validation failed")?;
+        // → context：接收静态字符串（或 Display 值），非惰性
 
     Ok(data)
 }
@@ -127,6 +154,7 @@ fn process_file(path: &str) -> Result<Data> {
 `?` 是 `match` + `From` 转换 + 提前返回的语法糖：
 
 ```rust
+// === ? 运算符脱糖：match + From 转换 + 提前返回 ===
 // 这段代码：
 let value = operation()?;
 
@@ -135,8 +163,9 @@ let value = match operation() {
     Ok(v) => v,
     Err(e) => return Err(From::from(e)),
     //                  ^^^^^^^^^^^^^^
-    //                  通过 From trait 自动转换
+    //                  通过 From trait 自动转换错误类型
 };
+// → 适用条件：外层函数返回类型为 Result<T, F>，且存在 From<E> for F
 ```
 
 **`?` 也适用于 `Option`**（在返回 `Option` 的函数中）：
@@ -144,7 +173,9 @@ let value = match operation() {
 ```rust
 fn find_user_email(users: &[User], name: &str) -> Option<String> {
     let user = users.iter().find(|u| u.name == name)?; // 未找到则返回 None
+    // → Iterator::find 返回 Option<&User>；? 在 Option 上：None 则提前 return None
     let email = user.email.as_ref()?; // email 为 None 时返回 None
+    // → Option::as_ref(&self) -> Option<&T>：从 &Option<T> 得到 Option<&T>
     Some(email.to_uppercase())
 }
 ```
@@ -152,18 +183,22 @@ fn find_user_email(users: &[User], name: &str) -> Option<String> {
 ### Panic、catch_unwind 与何时终止程序
 
 ```rust
+// === panic vs catch_unwind：bug 与预期错误的边界 ===
 // panic：用于 BUG，而非预期错误
 fn get_element(data: &[i32], index: usize) -> &i32 {
     // 如果这里 panic，那是编程错误（bug）。
     // 不要"处理"它——修复调用方。
     &data[index]
+    // → 索引越界时 panic（slice 的 Index 实现）
 }
 
 // catch_unwind：用于边界（FFI、线程池）
 use std::panic;
 
 let result = panic::catch_unwind(|| {
-    // 安全地运行可能 panic 的代码
+    // → catch_unwind<F, R>(f: F) -> Result<R, Box<dyn Any>>
+    //   捕获闭包中的 panic，转为 Result 返回（不展开调用栈）
+    //   要求闭包捕获为 &mut 或无捕获（满足 UnwindSafe）
     risky_operation()
 });
 
@@ -239,17 +274,25 @@ pub enum AppError {
 }
 
 fn read_file(path: &str) -> Result<String, AppError> {
+    // → std::fs::read_to_string -> Result<String, io::Error>
+    //   ? 通过 #[from] 生成的 From<io::Error> 转为 AppError::Io
     Ok(std::fs::read_to_string(path)?) // io::Error → AppError::Io 通过 #[from]
 }
 
 fn parse_json(content: &str) -> Result<serde_json::Value, AppError> {
+    // → serde_json::from_str -> Result<Value, serde_json::Error>
     Ok(serde_json::from_str(content)?) // serde_json::Error → AppError::Json
 }
 
 fn validate_name(value: &serde_json::Value) -> Result<String, AppError> {
     let name = value.get("name")
+        // → serde_json::Value::get(&self, key) -> Option<&Value>：按键取值
         .and_then(|v| v.as_str())
+        // → Option::and_then：None => None，Some(x) => f(x)
+        //   Value::as_str(&self) -> Option<&str>：非字符串则 None
         .ok_or_else(|| AppError::Validation {
+            // → Option::ok_or_else<E, F>(self, err: F) -> Result<T, E>
+            //   None => Err(err())，惰性构造错误
             field: "name".into(),
             reason: "must be a non-null string".into(),
         })?;

@@ -31,12 +31,15 @@ my_crate/
 
 ```rust
 // lib.rs — 通过再导出来精心组织你的公共 API：
+// → mod 声明：定义子模块，默认私有，外部无法访问模块路径。
 mod config;
 mod error;
 mod parser;
 mod utils;
 
 // 再导出用户所需的内容：
+// → pub use（再导出）：将子模块中的类型重新暴露在 crate 根，
+//   使用户能用 my_crate::Config 而非 my_crate::config::Config。
 pub use config::Config;
 pub use error::Error;
 pub use parser::Parser;
@@ -76,10 +79,16 @@ pub use parser::Parser;
 
 ```rust
 // 密封 trait 模式 — 用户可以使用但不能实现：
+// → 密封模式（sealed trait）：通过私有 trait 限制外部实现，
+//   使得只有本 crate 内的类型能实现该 trait，从而对外 API 演进可控。
 mod private {
+    // → private::Sealed 是私有 trait，外部模块无法命名或实现它，
+    //   这是密封模式的关键屏障。
     pub trait Sealed {}
 }
 
+// → DatabaseDriver 继承 private::Sealed：要实现 DatabaseDriver 必须同时实现 Sealed，
+//   而 Sealed 在私有模块中，外部无法实现，故外部无法实现 DatabaseDriver。
 pub trait DatabaseDriver: private::Sealed {
     fn connect(&self, url: &str) -> Connection;
 }
@@ -117,6 +126,9 @@ connect("localhost".to_string(), 5432);  // 烦人的 .to_string()
 connect(hostname.clone(), 5432);          // 如果已有 String，这是不必要的 clone
 
 // ✅ 符合人体工程学：接受任何可转换为 String 的类型
+// → impl Into<String>：参数接受任何实现了 Into<String> 的类型。
+//   Into 是 From 的镜像（实现 From 自动获得 Into）。
+//   &str 实现了 Into<String>（From<&str>），String 实现了 Into<String>（自反）。
 fn connect(host: impl Into<String>, port: u16) -> Connection {
     let host = host.into();  // 在函数内部转换一次
     // ...
@@ -141,7 +153,11 @@ fn file_exists(path: &Path) -> bool {
 file_exists(Path::new("/tmp/test.txt"));  // 尴尬
 
 // ✅ 接受任何可以表现为 &Path 的类型
+// → impl AsRef<Path>：参数接受任何能通过 .as_ref() 借用为 &Path 的类型。
+//   str、String、Path、PathBuf 都实现了 AsRef<Path>。
+//   与 Into 不同，AsRef 只借用不获取所有权 —— 适合只读场景。
 fn file_exists(path: impl AsRef<Path>) -> bool {
+    // → AsRef::as_ref：将当前类型借用为目标类型 &Path。
     path.as_ref().exists()
 }
 file_exists("/tmp/test.txt");                    // &str ✅
@@ -162,15 +178,22 @@ log_message(String::from("hello"));      // String ✅
 `Cow<'a, T>`（Clone on Write，写入时克隆）将分配延迟到需要修改时。它要么持有借用的 `&T`，要么持有拥有的 `T::Owned`。当大多数调用不需要修改数据时非常完美：
 
 ```rust
+// → std::borrow::Cow<'a, B>：Clone-on-Write 智能指针，是
+//   Cow::Borrowed(&'a B) 或 Cow::Owned(<B as ToOwned>::Owned>) 的枚举。
+//   B 约束为 ToOwned（如 str 的 Owned 是 String）。生命周期 'a 绑定借用源。
 use std::borrow::Cow;
 
 /// 归一化诊断消息 — 仅在需要修改时才分配。
+// → 返回 Cow<'_, str>：调用者拿到后可用 Deref 当 &str 用；
+//   若需修改则通过 into_owned() 或 to_mut() 触发一次性克隆。
 fn normalize_message(msg: &str) -> Cow<'_, str> {
     if msg.contains('\t') || msg.contains('\r') {
         // 必须分配 — 我们需要修改内容
+        // → str::replace：返回新的 String（已分配），包装进 Cow::Owned。
         Cow::Owned(msg.replace('\t', "    ").replace('\r', ""))
     } else {
         // 无分配 — 仅借用原始数据
+        // → Cow::Borrowed：零成本借用原 &str，不发生分配。
         Cow::Borrowed(msg)
     }
 }
@@ -180,6 +203,7 @@ let clean = normalize_message("All tests passed");          // Borrowed — 免�
 let fixed = normalize_message("Error:\tfailed\r\n");        // Owned — 已分配
 
 // Cow<str> 实现了 Deref<Target=str>，所以它表现得像 &str：
+// → 通过 Deref 自动解引用，clean/fixed 可直接当 &str 使用（打印、调方法）。
 println!("{}", clean);
 println!("{}", fixed.to_uppercase());
 ```
@@ -213,6 +237,7 @@ println!("{}", fixed.to_uppercase());
 ```rust
 /// 一个设计良好的诊断 API，使用符合人体工程学的参数：
 pub struct DiagRunner {
+    // → 内部字段存储拥有类型（String、PathBuf），存储所需所有权。
     name: String,
     config_path: PathBuf,
     results: HashMap<String, TestResult>,
@@ -220,6 +245,7 @@ pub struct DiagRunner {
 
 impl DiagRunner {
     /// name 接受任何类字符串类型，config 接受任何类路径类型。
+    // → 构造函数用 impl Into 接收，内部 .into() 转换为拥有类型存储。
     pub fn new(
         name: impl Into<String>,
         config_path: impl Into<PathBuf>,
@@ -231,6 +257,8 @@ impl DiagRunner {
     }
 
     /// 只读查找时接受任何 AsRef<str>。
+    // → 查询方法用 impl AsRef<str> 借用键，无需获取所有权。
+    //   HashMap::get 的键参数是 &Q where K: Borrow<Q>，&str 即可。
     pub fn get_result(&self, test_name: impl AsRef<str>) -> Option<&TestResult> {
         self.results.get(test_name.as_ref())
     }
@@ -256,6 +284,7 @@ pub fn parse_config(path: &str, format: &str, strict: bool) -> Result<Config, St
     // 哪些格式是有效的？"json"？"JSON"？"Json"？
     // path 是文件路径还是 URL？
     // "strict" 到底是什么意思？
+    // → todo!()：宏，标记未实现代码，运行到此处 panic（编译期不报错）。
     todo!()
 }
 ```
@@ -266,6 +295,8 @@ pub fn parse_config(path: &str, format: &str, strict: bool) -> Result<Config, St
 use std::path::Path;
 
 /// 支持的配置格式。
+// → #[non_exhaustive]：标记该枚举未来可追加变体而不算破坏性变更，
+//   下游 match 必须提供通配分支 _ =>，且不能用字面量构造。
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]  // 添加格式不会破坏下游
 pub enum Format {
@@ -275,9 +306,11 @@ pub enum Format {
 }
 
 /// 控制解析严格程度。
+// → #[derive(Default)] + #[default]：使枚举拥有默认值（Default trait）。
 #[derive(Debug, Clone, Copy, Default)]
 pub enum Strictness {
     /// 拒绝未知字段（库的默认行为）
+    // → #[default]：指定此变体为 Default 的返回值。
     #[default]
     Strict,
     /// 忽略未知字段（对前向兼容的配置有用）
@@ -337,12 +370,20 @@ use std::fmt;
 
 /// 一个已验证的 TCP 端口号（1–65535）。
 /// 如果你拥有一个 `Port`，它就保证是有效的。
+// → 新类型模式（newtype）：struct Port(u16) 包装原始类型。
+//   字段 u16 私有，外部无法直接构造 Port，只能通过 TryFrom，
+//   从而保证构造即有效。"解析，而非校验"的核心载体。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Port(u16);
 
+// → TryFrom<T>：尝试从 T 转换，可能失败。
+//   关联类型 type Error = PortError 指定失败时的错误类型。
+//   实现 TryFrom 会自动获得 TryInto（供调用方用 .try_into()）。
 impl TryFrom<u16> for Port {
     type Error = PortError;
 
+    // → fn try_from(value) -> Result<Self, Self::Error>：
+    //   校验输入，合法则 Ok(Port(value))，否则返回 Err。
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         if value == 0 {
             Err(PortError::Zero)
@@ -353,6 +394,7 @@ impl TryFrom<u16> for Port {
 }
 
 impl Port {
+    // → 提供访问器暴露内部值，而不暴露构造能力。
     pub fn get(&self) -> u16 { self.0 }
 }
 
@@ -362,6 +404,7 @@ pub enum PortError {
     InvalidFormat,
 }
 
+// → 实现 Display 使错误可读地呈现（错误处理最佳实践）。
 impl fmt::Display for PortError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -371,9 +414,13 @@ impl fmt::Display for PortError {
     }
 }
 
+// → 实现 std::error::Error 使其成为正式错误类型，
+//   可被 ? 传播到任何 Box<dyn Error> 或 thiserror 链中。
 impl std::error::Error for PortError {}
 
 // 现在类型系统强制保证了有效性：
+// → 参数类型是 Port 而非 u16 —— 调用方必须传入已校验的 Port，
+//   编译器阻止直接传 0 或任意 u16。
 fn start_server(port: Port) {
     // 无需校验 — Port 只能通过 TryFrom 构造，
     // 而它已经验证过有效性。
@@ -382,6 +429,8 @@ fn start_server(port: Port) {
 
 // 用法：
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // → TryFrom::try_from(8080)：返回 Result<Port, PortError>，
+    //   ? 解包：Err 则提前返回，Ok 则绑定 port。
     let port = Port::try_from(8080)?;   // ✅ 在边界处校验一次
     start_server(port);                  // 下游任何地方都不再重新校验
 
@@ -394,9 +443,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 /// 一个已验证的 IPMI 从地址（0x20–0xFE，仅偶数）。
+// → IpmiAddr(u8) 新类型携带两条不变量：偶数 + 范围内。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IpmiAddr(u8);
 
+// → 错误枚举用带数据变体记录非法值，便于诊断。
 #[derive(Debug)]
 pub enum IpmiAddrError {
     Odd(u8),
@@ -406,6 +457,7 @@ pub enum IpmiAddrError {
 impl fmt::Display for IpmiAddrError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            // → {v:02X}：以两位十六进制大写格式化，如 0x21。
             IpmiAddrError::Odd(v) => write!(f, "IPMI address 0x{v:02X} must be even"),
             IpmiAddrError::OutOfRange(v) => {
                 write!(f, "IPMI address 0x{v:02X} out of range (0x20..=0xFE)")
@@ -433,6 +485,7 @@ impl IpmiAddr {
 }
 
 // 下游代码永远不需要重新检查：
+// → 参数 addr: IpmiAddr 而非 u8 —— 类型即证明，编译器保证有效性。
 fn send_ipmi_command(addr: IpmiAddr, cmd: u8, data: &[u8]) -> Result<Vec<u8>, IpmiError> {
     // addr.get() 保证是一个有效的偶数 IPMI 地址
     raw_ipmi_send(addr.get(), cmd, data)
@@ -444,13 +497,19 @@ fn send_ipmi_command(addr: IpmiAddr, cmd: u8, data: &[u8]) -> Result<Vec<u8>, Ip
 对于通常从文本（CLI 参数、配置文件）解析的类型，请实现 `FromStr`：
 
 ```rust
+// → std::str::FromStr：从字符串解析的 trait，
+//   实现 FromStr 后类型即可用 "x".parse::<T>() 或 let x: T = "x".parse()?。
+//   关联类型 type Err = PortError 指定解析错误类型。
 use std::str::FromStr;
 
 impl FromStr for Port {
     type Err = PortError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // → str::parse()：内部调用 u16: FromStr 解析数字。
+        //   map_err 将 ParseIntError 转为 PortError::InvalidFormat。
         let n: u16 = s.parse().map_err(|_| PortError::InvalidFormat)?;
+        // → 复用已有 TryFrom 实现：一次校验兼顾格式与业务规则（DRY）。
         Port::try_from(n)
     }
 }
@@ -459,6 +518,7 @@ impl FromStr for Port {
 let port: Port = "8080".parse()?;   // 一步完成校验
 
 // 也能配合 clap CLI 解析使用：
+// → clap 的 derive 宏会为每个字段类型调用 FromStr，自动解析 CLI 字符串。
 // #[derive(Parser)]
 // struct Args {
 //     #[arg(short, long)]
@@ -500,6 +560,8 @@ let port: Port = "8080".parse()?;   // 一步完成校验
 #     fn from(e: serde_json::Error) -> Self { ConfigError::InvalidHost(e.to_string()) }
 # }
 /// 一个已验证的配置，只有所有字段都有效时才能存在。
+// → 组合多个已验证类型：ValidConfig 只有当所有字段都解析成功时才存在，
+//   使"整体配置有效"成为编译期可携带的保证。
 pub struct ValidConfig {
     pub host: Hostname,
     pub port: Port,
@@ -509,6 +571,8 @@ pub struct ValidConfig {
 impl TryFrom<RawConfig> for ValidConfig {
     type Error = ConfigError;
 
+    // → 对每个字段调用其 TryFrom，用 map_err 将字段级错误包装为 ConfigError。
+    //   任一字段失败则整体失败 —— 错误聚合在边界处。
     fn try_from(raw: RawConfig) -> Result<Self, Self::Error> {
         Ok(ValidConfig {
             host: Hostname::try_from(raw.host)
@@ -522,7 +586,10 @@ impl TryFrom<RawConfig> for ValidConfig {
 }
 
 // 在边界处解析一次，然后在各处使用已验证的类型：
+// → load_config 是系统边界：读取原始数据并一次性解析为 ValidConfig。
 fn load_config(path: &str) -> Result<ValidConfig, ConfigError> {
+    // → serde_json::from_str：反序列化为 RawConfig（中间未校验形态）。
+    // → Result::map_err 通过 From<io::Error> for ConfigError 自动转换（?）。
     let raw: RawConfig = serde_json::from_str(&std::fs::read_to_string(path)?)?;
     ValidConfig::try_from(raw)  // 所有校验都在这里发生
 }
@@ -556,7 +623,10 @@ quick-xml = { version = "0.31", optional = true }
 
 ```rust
 // 基于特性的条件编译：
+// → #[cfg(feature = "json")]：属性宏，仅当 "json" 特性启用时编译此项。
+//   特性在 Cargo.toml [features] 中定义，由 cargo build --features 控制。
 #[cfg(feature = "json")]
+// → T: serde::Serialize 约束：要求 value 是可序列化类型。
 pub fn to_json<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_string(value).unwrap()
 }
@@ -567,6 +637,8 @@ pub fn to_xml<T: serde::Serialize>(value: &T) -> String {
 }
 
 // 如果未启用所需特性，编译报错：
+// → compile_error!：编译期产生硬错误，用于强制用户启用某些 feature。
+//   cfg(not(any(...))) 表示"既非 json 也非 xml"时触发。
 #[cfg(not(any(feature = "json", feature = "xml")))]
 compile_error!("At least one format feature (json, xml) must be enabled");
 ```
@@ -657,10 +729,14 @@ Rust 可以在编译期将环境变量嵌入二进制文件中 — 对版本字�
 
 ```rust
 // env!() — 如果变量缺失，编译期 panic
+// → env!("VAR")：编译期读取环境变量并嵌入为 &'static str，
+//   若缺失则编译失败。常用于 Cargo 注入的元数据。
 const VERSION: &str = env!("CARGO_PKG_VERSION"); // "0.1.0" 来自 Cargo.toml
 const PKG_NAME: &str = env!("CARGO_PKG_NAME");   // 来自 Cargo.toml 的 crate 名
 
 // option_env!() — 返回 Option<&str>，缺失时不 panic
+// → option_env!("VAR")：返回 Option<&'static str>，缺失时为 None，
+//   适合可能不存在的可选构建信息。
 const BUILD_SHA: Option<&str> = option_env!("GIT_SHA");
 const BUILD_TIME: Option<&str> = option_env!("BUILD_TIMESTAMP");
 
@@ -701,6 +777,8 @@ fn main() {
 
 ```rust
 // 仅当 "serde" 特性启用时派生 Serialize：
+// → cfg_attr(cond, attr)：当 cond 为真时应用 attr，否则跳过。
+//   比 #[cfg()] 更精细 —— cfg 是"整个条目存在与否"，cfg_attr 是"属性存在与否"。
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct DiagResult {
@@ -712,12 +790,16 @@ pub struct DiagResult {
 // 有 "serde" 特性：DiagResult 可序列化
 
 // 用于测试的条件属性：
+// → 仅在 test 构建中派生 PartialEq，避免生产环境为大型结构体派生多余 trait。
 #[cfg_attr(test, derive(PartialEq))]  // 仅在测试构建中派生 PartialEq
 pub struct LargeStruct { /* ... */ }
 
 // 平台特定的函数属性：
+// → target_os = "linux" 是内置 cfg 键，仅在对应平台为真。
+//   link_name 修改 FFI 链接符号名，实现跨平台符号映射。
 #[cfg_attr(target_os = "linux", link_name = "ioctl")]
 #[cfg_attr(target_os = "freebsd", link_name = "__ioctl")]
+// → extern "C"：声明 C ABI 函数，与 C 二进制兼容。
 extern "C" fn platform_ioctl(fd: i32, request: u64) -> i32;
 ```
 
@@ -794,9 +876,14 @@ Rust 文档注释（`///`）可以包含**被编译并作为测试运行**的代
 ///
 /// assert!(parse_fc("not-a-fc").is_err());
 /// ```
+// → 文档测试会编译并运行上面 ``` 代码块；保持示例可运行即保持文档准确。
 pub fn parse_fc(input: &str) -> Result<u32, ParseError> {
+    // → str::strip_prefix：去除前缀，返回 Option<&str>，无前缀则 None。
+    // → ok_or：将 Option 转为 Result（None → 指定错误），? 提前返回错误。
     input.strip_prefix("FC:")
         .ok_or(ParseError::MissingPrefix)?
+        // → str::parse()：解析为 u32，返回 Result<u32, ParseIntError>。
+        // → map_err：将 ParseIntError 映射为 ParseError::InvalidNumber。
         .parse()
         .map_err(ParseError::InvalidNumber)
 }
@@ -810,6 +897,8 @@ cargo test        # 运行单元 + 集成 + 文档测试
 **模块级文档**使用文件顶部的 `//!`：
 
 ```rust
+// → //! 是模块级文档注释（位于文件顶部，描述整个模块/crate），
+//   区别于 ///（描述紧随其后的项）。cargo doc 将其渲染为 crate 首页。
 //! # 诊断框架
 //!
 //! 本 crate 提供核心诊断执行引擎。
@@ -824,6 +913,8 @@ cargo test        # 运行单元 + 集成 + 文档测试
 //! let mut fw = Framework::new("config.json")?;
 //! fw.run_all_tests()?;
 //! ```
+// → ```no_run：文档测试代码块标注，表示编译但不运行
+//   （用于有副作用或副作用的示例，避免 CI 失败）。
 ```
 
 ### 使用 Criterion 进行基准测试
@@ -867,12 +958,16 @@ fn create_server(host: &str, port: &str, max_conn: &str) -> Server { ... }
 
 ```rust
 #[derive(Debug, Clone)]
+// → Host(String)：新类型包装主机名，构造即校验非空且无空格。
 struct Host(String);
 
+// → TryFrom<&str>：从字符串切片构造 Host，校验内容。
 impl TryFrom<&str> for Host {
     type Error = String;
     fn try_from(s: &str) -> Result<Self, String> {
+        // → str::is_empty：检查是否为空字符串。
         if s.is_empty() { return Err("host cannot be empty".into()); }
+        // → str::contains：检查是否包含指定字符。
         if s.contains(' ') { return Err("host cannot contain spaces".into()); }
         Ok(Host(s.to_string()))
     }
@@ -903,6 +998,7 @@ impl TryFrom<u32> for MaxConnections {
 }
 
 #[derive(Debug)]
+// → ServerConfig 组合三个已验证类型：只要它存在，所有字段就都有效。
 struct ServerConfig {
     host: Host,
     port: Port,
@@ -916,6 +1012,7 @@ impl ServerConfig {
 }
 
 fn main() {
+    // → TryFrom::try_from 返回 Result，unwrap() 在示例中直接断言成功。
     let config = ServerConfig::new(
         Host::try_from("localhost").unwrap(),
         Port::try_from(8080).unwrap(),
@@ -924,6 +1021,7 @@ fn main() {
     println!("{config:?}");
 
     // 无效值在解析时被捕获：
+    // → Result::is_err：断言构造失败，验证校验逻辑生效。
     assert!(Host::try_from("").is_err());
     assert!(Port::try_from(0).is_err());
     assert!(MaxConnections::try_from(99999).is_err());

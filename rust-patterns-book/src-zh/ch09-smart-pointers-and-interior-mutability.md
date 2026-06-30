@@ -9,28 +9,38 @@
 ## Box、Rc、Arc — 堆分配与共享
 
 ```rust
+// ============================================================
+// Box / Rc / Arc —— 三种堆分配智能指针对比
+// ============================================================
+// 核心概念：
+// - Box<T>：单一所有权，堆分配，编译期已知的唯一指针
+// - Rc<T>：引用计数，单线程多所有权（非线程安全）
+// - Arc<T>：原子引用计数，线程安全的多所有权
+
 // --- Box<T>：单一所有者，堆分配 ---
 // 使用场景：递归类型、大尺寸值、trait 对象
-let boxed: Box<i32> = Box::new(42);
-println!("{}", *boxed); // 解引用为 i32
+let boxed: Box<i32> = Box::new(42);  // → Box::new(value) -> Box<T>：在堆上分配并转移所有权
+println!("{}", *boxed); // 解引用为 i32   // → * 解引用：Box 实现了 Deref trait
 
 // 递归类型需要 Box（否则尺寸无限大）：
 enum List<T> {
-    Cons(T, Box<List<T>>),
+    Cons(T, Box<List<T>>),  // → Box 打断无限递归：指针大小固定（8 字节）
     Nil,
 }
 
 // trait 对象（动态派发）：
 let writer: Box<dyn std::io::Write> = Box::new(std::io::stdout());
+// → Box<dyn Trait>：堆上的 trait 对象，运行时通过虚表派发方法
 
 // --- Rc<T>：多个所有者，单线程 ---
 // 使用场景：单线程内的共享所有权（非 Send/Sync）
 use std::rc::Rc;
 
-let a = Rc::new(vec![1, 2, 3]);
-let b = Rc::clone(&a); // 递增引用计数（非深拷贝）
+let a = Rc::new(vec![1, 2, 3]);        // → Rc::new(t) -> Rc<T>：创建引用计数为 1 的指针
+let b = Rc::clone(&a); // 递增引用计数（非深拷贝）  // → Rc::clone(&rc)：只递增 strong_count，O(1)
 let c = Rc::clone(&a);
 println!("Ref count: {}", Rc::strong_count(&a)); // 3
+// → Rc::strong_count(&rc) -> usize：返回当前强引用计数
 
 // 三者指向同一个 Vec。当最后一个 Rc 被 drop 时，
 // Vec 被释放。
@@ -39,12 +49,12 @@ println!("Ref count: {}", Rc::strong_count(&a)); // 3
 // 使用场景：跨线程的共享所有权
 use std::sync::Arc;
 
-let shared = Arc::new(String::from("shared data"));
+let shared = Arc::new(String::from("shared data"));  // → Arc::new：原子计数初始化为 1
 let handles: Vec<_> = (0..5).map(|_| {
-    let shared = Arc::clone(&shared);
-    std::thread::spawn(move || println!("{shared}"))
+    let shared = Arc::clone(&shared);  // → Arc::clone：原子递增计数（原子指令，线程安全）
+    std::thread::spawn(move || println!("{shared}"))  // → move 转移 Arc 到子线程
 }).collect();
-for h in handles { h.join().unwrap(); }
+for h in handles { h.join().unwrap(); }  // → JoinHandle::join() -> Result：等待线程结束
 ```
 
 ### Weak 引用 — 打破引用循环
@@ -52,6 +62,7 @@ for h in handles { h.join().unwrap(); }
 `Rc` 和 `Arc` 使用引用计数，无法释放循环引用（A → B → A）。`Weak<T>` 是一个非拥有型句柄，它**不会**增加强引用计数：
 
 ```rust
+// === Weak<T>：非拥有型引用，打破 Rc/Arc 的循环引用 ===
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 
@@ -63,14 +74,17 @@ struct Node {
 
 let parent = Rc::new(Node {
     value: 0, parent: RefCell::new(Weak::new()), children: RefCell::new(vec![]),
-});
+});   // → Rc::new：strong_count = 1
 let child = Rc::new(Node {
     value: 1, parent: RefCell::new(Rc::downgrade(&parent)), children: RefCell::new(vec![]),
-});
+});   // → Rc::downgrade(&rc) -> Weak<T>：创建弱引用，strong_count 不变
 parent.children.borrow_mut().push(Rc::clone(&child));
+//     ↑ borrow_mut() -> RefMut<_>：运行时获取可变借用
 
 // 从子节点访问父节点——返回 Option<Rc<Node>>：
 if let Some(p) = child.parent.borrow().upgrade() {
+    // → Weak::upgrade(&self) -> Option<Rc<T>>：尝试升级为强引用
+    //   若原数据已被释放则返回 None
     println!("Child's parent value: {}", p.value); // 0
 }
 // 当 `parent` 被 drop 时，strong_count → 0，内存被释放。
@@ -84,6 +98,13 @@ if let Some(p) = child.parent.borrow().upgrade() {
 有时你需要修改共享（`&`）引用背后的数据。Rust 通过运行时借用检查提供*内部可变性（interior mutability）*：
 
 ```rust
+// ============================================================
+// Cell<T> 与 RefCell<T> —— 内部可变性的两种实现
+// ============================================================
+// 核心概念：内部可变性允许通过 &self 修改内部数据。
+// - Cell<T>：通过整体复制实现，要求 T: Copy，永不 panic
+// - RefCell<T>：通过运行时借用检查实现，适用于任意 T
+
 use std::cell::{Cell, RefCell};
 
 // --- Cell<T>：基于 Copy 的内部可变性 ---
@@ -94,9 +115,12 @@ struct Counter {
 
 impl Counter {
     fn new() -> Self { Counter { count: Cell::new(0) } }
+    // → Cell::new(t) -> Cell<T>：包装初始值
 
     fn increment(&self) { // &self，而非 &mut self！
         self.count.set(self.count.get() + 1);
+        // ↑ get() -> T：复制出当前值（要求 T: Copy）
+        //   set(value)：整体替换内部值（复制语义）
     }
 
     fn value(&self) -> u32 { self.count.get() }
@@ -110,13 +134,18 @@ struct Cache {
 
 impl Cache {
     fn new() -> Self { Cache { data: RefCell::new(Vec::new()) } }
+    // → RefCell::new(t) -> RefCell<T>：包装数据
 
     fn add(&self, item: String) { // &self——从外部看似不可变
         self.data.borrow_mut().push(item); // 运行时检查的 &mut
+        // ↑ borrow_mut() -> RefMut<T>：获取可变借用守卫
+        //   若已有活跃借用则 panic（BorrowMutError）
     }
 
     fn get_all(&self) -> Vec<String> {
         self.data.borrow().clone() // 运行时检查的 &
+        // ↑ borrow() -> Ref<T>：获取不可变借用守卫
+        //   clone()：Vec<String> 的深拷贝
     }
 
     fn bad_example(&self) {
@@ -134,16 +163,21 @@ impl Cache {
 `Cow`（Clone on Write，写时克隆）持有借用的值或拥有的值。它仅在需要修改时才进行*克隆*：
 
 ```rust
+// === Cow<T>：写时克隆，避免无谓的内存分配 ===
 use std::borrow::Cow;
 
 // 无需修改时避免分配：
 fn normalize(input: &str) -> Cow<'_, str> {
+    // → Cow<'a, B>：持有 &B（借用）或 B::Owned（拥有）两种状态
     if input.contains('\t') {
         // 仅在需要替换制表符时才分配
         Cow::Owned(input.replace('\t', "    "))
+        // → Cow::Owned(o)：拥有所有权的变体
+        //   str::replace(&self, from, to) -> String：分配新字符串
     } else {
         // 不分配——直接返回引用
         Cow::Borrowed(input)
+        // → Cow::Owned 的对立面：零拷贝返回借用引用
     }
 }
 
@@ -164,6 +198,8 @@ fn process(data: Cow<'_, [u8]>) {
     println!("Length: {}", data.len());
     // 需要修改时，Cow 自动克隆：
     let mut owned = data.into_owned(); // 仅当 Borrowed 时才克隆
+    // → Cow::into_owned(self) -> <B as ToOwned>::Owned
+    //   若是 Borrowed 则调用 ToOwned 克隆，Owned 则直接取出
     owned.push(0xFF);
 }
 ```
@@ -180,8 +216,8 @@ fn pad_frame(frame: &[u8], min_len: usize) -> Cow<'_, [u8]> {
     if frame.len() >= min_len {
         Cow::Borrowed(frame)  // 已足够长——零分配
     } else {
-        let mut padded = frame.to_vec();
-        padded.resize(min_len, 0x00);
+        let mut padded = frame.to_vec();  // → [u8]::to_vec()：从切片分配新 Vec
+        padded.resize(min_len, 0x00);     // → Vec::resize(new_len, value)：填充至指定长度
         Cow::Owned(padded)    // 仅在需要填充时才分配
     }
 }
@@ -208,6 +244,11 @@ let long  = pad_frame(&[0; 64], 8);          // Borrowed——已 ≥ 8
 `Pin<P>` 阻止值在内存中被移动。这对于**自引用类型（self-referential types）**——即包含指向自身数据的指针的结构体——以及对于可能在 `.await` 点之间持有引用的 `Future` 来说是至关重要的。
 
 ```rust
+// ============================================================
+// Pin<P> 与自引用结构体 —— 阻止值在内存中被移动
+// ============================================================
+// 核心概念：Pin 是一个指针包装器，它承诺"不会通过此指针移动底层值"。
+// PhantomPinned 用于"选择退出"自动 Unpin trait，使类型变为 !Unpin。
 use std::pin::Pin;
 use std::marker::PhantomPinned;
 
@@ -216,6 +257,7 @@ struct SelfRef {
     data: String,
     ptr: *const String, // 指向上方的 `data`
     _pin: PhantomPinned, // 退出 Unpin——不可被移动
+    // → PhantomPinned 是零大小标记类型，使 SelfRef 变为 !Unpin
 }
 
 impl SelfRef {
@@ -226,12 +268,16 @@ impl SelfRef {
             _pin: PhantomPinned,
         };
         let mut boxed = Box::pin(val);
+        // → Box::pin(x) -> Pin<Box<T>>：堆分配并立即固定
 
         // SAFETY：设置指针后我们不会移动数据
         let self_ptr: *const String = &boxed.data;
         unsafe {
             let mut_ref = Pin::as_mut(&mut boxed);
+            // → Pin::as_mut(&mut Pin<P>) -> Pin<&mut T>：从 Pin<Box> 得到 Pin<&mut>
             Pin::get_unchecked_mut(mut_ref).ptr = self_ptr;
+            // → get_unchecked_mut：unsafe 地取出 &mut T，绕过 Pin 的保护
+            //   调用者需保证之后不违反 pin 不变量
         }
         boxed
     }
@@ -242,7 +288,7 @@ impl SelfRef {
 
     fn ptr_data(&self) -> &str {
         // SAFETY：指针在 pinned 时被设置为指向 self.data
-        unsafe { &*self.ptr }
+        unsafe { &*self.ptr }   // → 解引用裸指针（unsafe，需保证有效性）
     }
 }
 
@@ -314,6 +360,8 @@ impl MyFuture {
         // SAFETY：`data` 不是结构性 pinned 的。单独移动 `data`
         // 不会移动整个结构体，因此 Pin 的保证得以保持。
         unsafe { &mut self.get_unchecked_mut().data }
+        //     ↑ Pin::get_unchecked_mut(self) -> &mut Self
+        //       绕过 pin 检查取出 &mut（unsafe）
     }
 
     // 投影到 `state`——此字段是结构性 pinned 的
@@ -321,6 +369,8 @@ impl MyFuture {
         // SAFETY：`state` 是结构性 pinned 的——我们通过返回
         // Pin<&mut InternalState> 来维持 pin 不变量。
         unsafe { Pin::new_unchecked(&mut self.get_unchecked_mut().state) }
+        //     ↑ Pin::new_unchecked<P>(pointer: P) -> Pin<P>
+        //       不安全地构造 Pin，要求调用者保证指针指向的数据不被移动
     }
 }
 ```
@@ -335,12 +385,13 @@ impl MyFuture {
 `pin-project` crate 在编译时生成可证明正确的投影，消除了手动 `unsafe` 的需要：
 
 ```rust
+// === pin-project crate：编译时安全的 Pin 投影（零 unsafe） ===
 use pin_project::pin_project;
 use std::pin::Pin;
 use std::future::Future;
 use std::task::{Context, Poll};
 
-#[pin_project]                   // <-- 生成投影方法
+#[pin_project]                   // <-- 过程宏，生成 project() 等方法
 struct TimedFuture<F: Future> {
     #[pin]                       // <-- 结构性 pinned（它是一个 Future）
     inner: F,
@@ -348,16 +399,20 @@ struct TimedFuture<F: Future> {
 }
 
 impl<F: Future> Future for TimedFuture<F> {
+    // → Future trait 的关联类型，完成后返回 (内部结果, 耗时)
     type Output = (F::Output, std::time::Duration);
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();  // 安全！由 pin_project 生成
+        // → project() 返回一个投影结构体：
         //   this.inner   : Pin<&mut F>              — pinned 字段
         //   this.started_at : &mut std::time::Instant — 未 pinned 字段
 
         match this.inner.poll(cx) {
+            // → Future::poll(self: Pin<&mut Self>, cx) -> Poll<Output>
             Poll::Ready(output) => {
                 let elapsed = this.started_at.elapsed();
+                // → Instant::elapsed(&self) -> Duration：从该时刻至今的时长
                 Poll::Ready((output, elapsed))
             }
             Poll::Pending => Poll::Pending,
@@ -430,9 +485,11 @@ Rust 的 drop 顺序是确定性的，但有一些值得了解的规则：
 #### Drop 顺序规则
 
 ```rust
+// === Drop 顺序演示：局部变量按逆声明顺序释放 ===
 struct Label(&'static str);
 
 impl Drop for Label {
+    // → Drop::drop(&mut self)：析构函数，值离开作用域时自动调用
     fn drop(&mut self) { println!("Dropping {}", self.0); }
 }
 
@@ -472,6 +529,7 @@ struct Server {
 `ManuallyDrop<T>` 包装一个值并阻止其析构函数自动运行。你负责 drop 它（或故意泄漏它）：
 
 ```rust
+// === ManuallyDrop<T>：抑制自动 Drop，手动控制析构时机 ===
 use std::mem::ManuallyDrop;
 
 // 用例 1：在 unsafe 代码中防止双重释放
@@ -485,12 +543,15 @@ impl TwoPhaseBuffer {
     fn new(capacity: usize) -> Self {
         TwoPhaseBuffer {
             data: ManuallyDrop::new(Vec::with_capacity(capacity)),
+            // → ManuallyDrop::new(val) -> ManuallyDrop<T>：包装值，禁用自动 Drop
             committed: false,
         }
     }
 
     fn write(&mut self, bytes: &[u8]) {
         self.data.extend_from_slice(bytes);
+        // → ManuallyDrop 通过 Deref 透明访问内部 Vec 的方法
+        //   Vec::extend_from_slice(&mut self, &[T])：追加切片内容
     }
 
     fn commit(&mut self) {
@@ -506,6 +567,8 @@ impl Drop for TwoPhaseBuffer {
         }
         // SAFETY：data 在此处始终有效；我们只 drop 一次。
         unsafe { ManuallyDrop::drop(&mut self.data); }
+        // → ManuallyDrop::drop(slot: &mut ManuallyDrop<T>)：手动运行内部值的析构
+        //   安全性要求：之后不可再使用该 ManuallyDrop
     }
 }
 ```
@@ -516,6 +579,8 @@ fn leaked_string() -> &'static str {
     // Box::leak() 是创建 &'static 引用的惯用方式：
     let s = String::from("lives forever");
     Box::leak(s.into_boxed_str())
+    // → String::into_boxed_str(self) -> Box<str>：转为boxed切片
+    //   Box::leak(b: Box<T>) -> &'static mut T：泄漏并返回静态引用
     // ⚠️ 这是一次受控的内存泄漏。String 的堆分配
     // 永远不会被释放。仅用于长期存活的单例。
 }
@@ -529,6 +594,8 @@ fn leaked_string_manual() -> &'static str {
     // SAFETY：ManuallyDrop 阻止释放；堆数据永久存活，
     // 因此 'static 引用是有效的。
     unsafe { &*(md.as_str() as *const str) }
+    // → str::as_str(&self) -> &str：在 ManuallyDrop 上通过 Deref 访问
+    //   as *const str：转为裸指针；&* 解引用为 'static &str（unsafe）
 }
 ```
 
@@ -537,6 +604,7 @@ fn leaked_string_manual() -> &'static str {
 use std::mem::ManuallyDrop;
 
 union IntOrString {
+    // → union：内存重叠的字段，编译器不知哪个活跃，故不能自动 Drop
     i: u64,
     s: ManuallyDrop<String>,
     // String 有 Drop 实现，因此在联合体中必须用 ManuallyDrop 包装
@@ -629,23 +697,27 @@ impl Drop for Node {
 }
 
 fn main() {
-    let a = Node::new("A");
+    let a = Node::new("A");   // → 返回 Rc<RefCell<Node>>，strong_count = 1
     let b = Node::new("B");
     let c = Node::new("C");
 
     // A → B → C，其中 C 通过 Weak 反向引用 A
     a.borrow_mut().children.push(Rc::clone(&b));
+    // ↑ borrow_mut() -> RefMut：获取可变借用后访问 children
+    //   Rc::clone(&rc)：递增 strong_count（非深拷贝）
     b.borrow_mut().children.push(Rc::clone(&c));
     c.borrow_mut().back_ref = Some(Rc::downgrade(&a)); // Weak 引用！
+    // ↑ Rc::downgrade(&rc) -> Weak：创建弱引用，不增加 strong_count
 
     println!("A strong count: {}", Rc::strong_count(&a)); // 1（仅 `a` 绑定）
     println!("B strong count: {}", Rc::strong_count(&b)); // 2（b + A 的子节点）
     println!("C strong count: {}", Rc::strong_count(&c)); // 2（c + B 的子节点）
 
     // 升级 weak 引用以验证其工作：
-    let c_ref = c.borrow();
+    let c_ref = c.borrow();   // → borrow() -> Ref：不可变借用守卫
     if let Some(back) = &c_ref.back_ref {
         if let Some(a_ref) = back.upgrade() {
+            // → Weak::upgrade(&self) -> Option<Rc<T>>：升级为强引用
             println!("C points back to: {}", a_ref.borrow().name);
         }
     }
