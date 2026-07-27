@@ -1,11 +1,12 @@
 [package]
-name = "xtask"
+name = "build-epub-zh"
 version = "0.1.0"
 edition = "2021"
 publish = false
 
+[workspace]
+
 [dependencies]
-ctrlc = "3.4"
 ureq = "2"
 base64 = "0.22"
 regex = "1"

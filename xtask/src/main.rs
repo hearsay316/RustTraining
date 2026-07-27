@@ -4,6 +4,8 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
 /// (slug, title, description, category)
 const BOOKS: &[(&str, &str, &str, &str)] = &[
@@ -67,6 +69,7 @@ fn main() {
             cmd_serve();
         }
         Some("deploy") => cmd_deploy(),
+        Some("epub") => cmd_epub(&args[1..]),
         Some("clean") => cmd_clean(),
         Some("--help" | "-h" | "help") | None => print_usage(0),
         Some(other) => {
@@ -91,7 +94,13 @@ Commands:
   build    Build all books into site/ (for local preview)
   serve    Build and serve at http://localhost:3000
   deploy   Build all books into docs/ (for GitHub Pages)
-  clean    Remove site/ and docs/ directories"
+  epub     Build EPUB files (all or specific book)
+  clean    Remove site/ and docs/ directories
+
+epub usage:
+  cargo xtask epub            Build EPUB for all books (EN + ZH if available)
+  cargo xtask epub <slug>     Build EPUB for a specific book (e.g. async-book)
+  cargo xtask epub --zh       Build EPUB only for Chinese versions"
     );
     std::process::exit(code);
 }
@@ -607,11 +616,367 @@ fn guess_mime(path: &Path) -> &'static str {
     }
 }
 
+// ── epub ────────────────────────────────────────────────────────────
+
+/// EPUB code formatting CSS (embedded for zero-config)
+const EPUB_CSS: &str = r#"/* EPUB code block readability tweaks */
+pre {
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 0.85em;
+  margin: 1em 0;
+  line-height: 1.5;
+  font-size: 0.85em;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+code {
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 0.92em;
+}
+pre code {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.5;
+}
+p code, li code, td code {
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 3px;
+  padding: 0.1em 0.25em;
+  font-size: 0.88em;
+}
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1em auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  margin: 1em 0;
+}
+th, td {
+  border: 1px solid #d0d7de;
+  padding: 0.4em 0.5em;
+  vertical-align: top;
+}
+th {
+  background: #f0f3f6;
+  font-weight: bold;
+}
+blockquote {
+  border-left: 4px solid #d0d7de;
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  background: #f9fafb;
+  color: #555;
+}
+body, p, li {
+  line-height: 1.8;
+}
+h1 { font-size: 1.8em; border-bottom: 2px solid #e1e4e8; padding-bottom: 0.3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid #e1e4e8; padding-bottom: 0.3em; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1.1em; }
+"#;
+
+/// Books that have Chinese translations (slug → zh title)
+const ZH_BOOKS: &[(&str, &str)] = &[
+    ("async-book", "Async Rust：从 Future 到生产实践"),
+    ("rust-patterns-book", "Rust 模式与工程实践"),
+];
+
+/// Check if a book has a Chinese version
+fn has_zh(slug: &str) -> bool {
+    ZH_BOOKS.iter().any(|(s, _)| *s == slug)
+}
+
+fn cmd_epub(args: &[String]) {
+    if !check_mdbook() {
+        eprintln!("Error: 'mdbook' not found in PATH.");
+        std::process::exit(1);
+    }
+    let root = project_root();
+    let epub_out = root.join("epub");
+
+    // Parse args: optional slug or --zh flag
+    let only_zh = args.iter().any(|a| a == "--zh");
+    let single_slug: Option<&str> = args.iter().find_map(|a| {
+        if a.starts_with("--") {
+            None
+        } else {
+            Some(a.as_str())
+        }
+    });
+
+    if epub_out.exists() {
+        let _ = fs::remove_dir_all(&epub_out);
+    }
+    fs::create_dir_all(&epub_out).expect("failed to create epub/ dir");
+
+    println!("Building EPUB files into epub/\n");
+
+    let mut en_ok = 0u32;
+    let mut zh_ok = 0u32;
+    let mut en_fail = 0u32;
+    let mut zh_fail = 0u32;
+
+    for &(slug, title, _, _) in BOOKS {
+        // Filter by single slug if specified
+        if let Some(s) = single_slug {
+            if s != slug {
+                continue;
+            }
+        }
+
+        let book_dir = root.join(slug);
+        if !book_dir.is_dir() {
+            eprintln!("  ✗ {slug}/ not found, skipping");
+            continue;
+        }
+
+        // English EPUB
+        if !only_zh {
+            match build_single_epub(&book_dir, slug, title, false, &epub_out) {
+                Ok(f) => {
+                    println!("  ✓ {slug} (EN): {}", f.display());
+                    en_ok += 1;
+                }
+                Err(e) => {
+                    eprintln!("  ✗ {slug} (EN) FAILED: {e}");
+                    en_fail += 1;
+                }
+            }
+        }
+
+        // Chinese EPUB (if available)
+        if has_zh(slug) {
+            let zh_title = ZH_BOOKS
+                .iter()
+                .find(|(s, _)| *s == slug)
+                .map(|(_, t)| *t)
+                .unwrap_or(title);
+            match build_single_epub(&book_dir, slug, zh_title, true, &epub_out) {
+                Ok(f) => {
+                    println!("  ✓ {slug} (ZH): {}", f.display());
+                    zh_ok += 1;
+                }
+                Err(e) => {
+                    eprintln!("  ✗ {slug} (ZH) FAILED: {e}");
+                    zh_fail += 1;
+                }
+            }
+        }
+    }
+
+    println!("\n  EN: {en_ok} ok, {en_fail} failed");
+    if zh_ok + zh_fail > 0 {
+        println!("  ZH: {zh_ok} ok, {zh_fail} failed");
+    }
+    println!("\nDone! EPUB files in epub/");
+}
+
+/// Build EPUB for a single book (English or Chinese).
+///
+/// For Chinese: renders Mermaid diagrams to PNG, replaces code blocks with image references.
+/// For English: builds directly from book.toml.
+fn build_single_epub(
+    book_dir: &Path,
+    slug: &str,
+    title: &str,
+    is_zh: bool,
+    output_dir: &Path,
+) -> Result<PathBuf, String> {
+    // Create temp build dir
+    let work = book_dir.join(".epub-work");
+    if work.exists() {
+        fs::remove_dir_all(&work).map_err(|e| format!("clean work dir: {e}"))?;
+    }
+    let src_dir = work.join("src");
+    let images_dir = src_dir.join("images");
+    fs::create_dir_all(&images_dir).map_err(|e| format!("create dirs: {e}"))?;
+
+    // Determine source markdown directory
+    let md_src = if is_zh {
+        book_dir.join("src-zh")
+    } else {
+        book_dir.join("src")
+    };
+
+    // Copy and process markdown files
+    let mut mermaid_counter = 0usize;
+    let mermaid_re = regex::Regex::new(r"(?s)```mermaid\n(.*?)```").unwrap();
+
+    let mut md_files: Vec<(String, PathBuf)> = Vec::new();
+    for entry in fs::read_dir(&md_src).map_err(|e| format!("read src: {e}"))? {
+        let entry = entry.map_err(|e| format!("read entry: {e}"))?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.ends_with(".md") {
+            md_files.push((name, entry.path()));
+        }
+    }
+    md_files.sort_by(|a, b| a.0.cmp(&b.0));
+
+    for (name, path) in &md_files {
+        let content = fs::read_to_string(path).map_err(|e| format!("read {name}: {e}"))?;
+        let processed = if mermaid_re.is_match(&content) {
+            process_mermaid_blocks(&content, &mut mermaid_counter, &images_dir, &mermaid_re)
+        } else {
+            content
+        };
+        fs::write(src_dir.join(name), processed)
+            .map_err(|e| format!("write {name}: {e}"))?;
+    }
+
+    // Write CSS
+    fs::write(work.join("epub-code.css"), EPUB_CSS)
+        .map_err(|e| format!("write css: {e}"))?;
+
+    // Write book.toml
+    // NOTE: mdbook-epub uses title as the EPUB filename, so it must not
+    // contain characters like `/`, `\`, `:` etc. We sanitize by using slug
+    // as a prefix when title contains special chars.
+    let safe_title = if title.contains('/') || title.contains('\\') || title.contains(':') {
+        slug.to_string()
+    } else {
+        title.to_string()
+    };
+    let lang = if is_zh { "zh-CN" } else { "en" };
+    let book_toml = format!(
+        r#"[book]
+title = "{safe_title}"
+authors = ["Rust Training Team"]
+language = "{lang}"
+src = "src"
+
+[build]
+build-dir = "book-epub"
+
+[output.epub]
+additional-css = ["epub-code.css"]
+
+[output.html]
+default-theme = "light"
+additional-css = ["epub-code.css"]
+"#
+    );
+    fs::write(work.join("book.toml"), book_toml)
+        .map_err(|e| format!("write book.toml: {e}"))?;
+
+    // Run mdbook build — use status() (not output()) because mdbook-epub
+    // communicates via STDIN/STDOUT pipe with mdbook.
+    let status = Command::new("mdbook")
+        .arg("build")
+        .current_dir(&work)
+        .status()
+        .map_err(|e| format!("run mdbook: {e}"))?;
+
+    if !status.success() {
+        // Keep work dir for debugging
+        return Err(format!("mdbook build failed (work dir: {})", work.display()));
+    }
+
+    // Find and copy EPUB file
+    let epub_build_dir = work.join("book-epub").join("epub");
+    let suffix = if is_zh { "-zh" } else { "" };
+    let dest_name = format!("{slug}{suffix}.epub");
+    let dest = output_dir.join(&dest_name);
+
+    let mut found_epub = false;
+    if epub_build_dir.exists() {
+        for entry in fs::read_dir(&epub_build_dir).map_err(|e| format!("read epub dir: {e}"))? {
+            let entry = entry.map_err(|e| format!("read epub entry: {e}"))?;
+            let src = entry.path();
+            if src.extension().and_then(|e| e.to_str()) == Some("epub") {
+                let meta = fs::metadata(&src).map_err(|e| format!("stat epub: {e}"))?;
+                if meta.len() < 1000 {
+                    continue;
+                }
+                fs::copy(&src, &dest).map_err(|e| format!("copy epub: {e}"))?;
+                found_epub = true;
+                break;
+            }
+        }
+    }
+
+    // Clean up temp dir
+    let _ = fs::remove_dir_all(&work);
+
+    if found_epub {
+        Ok(dest)
+    } else {
+        Err("no valid EPUB file produced".to_string())
+    }
+}
+
+/// Replace ```mermaid blocks with rendered PNG images
+fn process_mermaid_blocks(
+    content: &str,
+    counter: &mut usize,
+    images_dir: &Path,
+    re: &regex::Regex,
+) -> String {
+    re.replace_all(content, |caps: &regex::Captures| {
+        *counter += 1;
+        let mermaid_code = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("");
+        match render_mermaid_to_png(mermaid_code, *counter, images_dir) {
+            Some(rel_path) => format!("![流程图 {}]({})", *counter, rel_path),
+            None => format!("```mermaid\n{}\n```", mermaid_code),
+        }
+    })
+    .into_owned()
+}
+
+/// Render Mermaid code to PNG via mermaid.ink API (3 retries)
+fn render_mermaid_to_png(mermaid_code: &str, idx: usize, images_dir: &Path) -> Option<String> {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+
+    let encoded = URL_SAFE_NO_PAD.encode(mermaid_code.as_bytes());
+    let url = format!("https://mermaid.ink/img/{}", encoded);
+    let img_path = images_dir.join(format!("mermaid-{:02}.png", idx));
+
+    for attempt in 1..=3u32 {
+        match ureq::get(&url)
+            .set("User-Agent", "Mozilla/5.0")
+            .timeout(Duration::from_secs(30))
+            .call()
+        {
+            Ok(resp) => {
+                let mut reader = resp.into_reader();
+                let mut buf = Vec::new();
+                if std::io::Read::read_to_end(&mut reader, &mut buf).is_ok() && buf.len() > 200 {
+                    if fs::write(&img_path, &buf).is_ok() {
+                        println!("    [mermaid] rendered diagram {}", idx);
+                        return Some(format!("images/mermaid-{:02}.png", idx));
+                    }
+                }
+                if attempt < 3 {
+                    thread::sleep(Duration::from_secs(2));
+                }
+            }
+            Err(_) => {
+                if attempt < 3 {
+                    thread::sleep(Duration::from_secs(2));
+                }
+            }
+        }
+    }
+    eprintln!("    [mermaid] FAILED diagram {}, keeping as code block", idx);
+    None
+}
+
 // ── clean ────────────────────────────────────────────────────────────
 
 fn cmd_clean() {
     let root = project_root();
-    for dir_name in ["site", "docs"] {
+    for dir_name in ["site", "docs", "epub"] {
         let dir = root.join(dir_name);
         if dir.exists() {
             fs::remove_dir_all(&dir).expect("failed to remove dir");

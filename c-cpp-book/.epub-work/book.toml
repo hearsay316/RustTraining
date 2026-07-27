@@ -1,0 +1,15 @@
+[book]
+title = "Rust for C/C++ Programmers"
+authors = ["Rust Training Team"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book-epub"
+
+[output.epub]
+additional-css = ["epub-code.css"]
+
+[output.html]
+default-theme = "light"
+additional-css = ["epub-code.css"]
